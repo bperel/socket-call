@@ -1,0 +1,29 @@
+{
+  "name": "socket-call-client",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "/dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=22.0.0 <23.0.0"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.1"
+  },
+  "peerDependencies": {
+    "axios-cache-interceptor": "^1.6.2",
+    "typescript": "^5.3.3",
+    "vue": "^3.4.15"
+  },
+  "peerDependenciesMeta": {
+    "axios-cache-interceptor": {
+      "optional": true
+    }
+  }
+}

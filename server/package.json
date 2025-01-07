@@ -1,0 +1,22 @@
+{
+  "name": "socket-call-server",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "/dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=22.0.0 <23.0.0"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
