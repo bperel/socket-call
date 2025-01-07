@@ -32,6 +32,18 @@ document.getElementById('run-process')!.addEventListener('click', () => {
   user.services.runProcess();
 });
 
+user.connect()
+
 user.on('reminder', (message) => {
   document.getElementById('messages')!.innerHTML += message + '<br />';
+});
+
+user.on('process', (id) => {
+  document.getElementById('messages')!.innerHTML += 'Process started: ' +
+   id + '<br />';
+});
+
+user.on('processEnd', (id) => {
+  document.getElementById('messages')!.innerHTML += 'Process ended: ' +
+   id + '<br />';
 });

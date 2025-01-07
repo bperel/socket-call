@@ -2,7 +2,10 @@
     "name": "socket-call-server-demo",
     "scripts": {
         "test": "echo \"Error: no test specified\" && exit 1",
-        "dev": "bun run --watch index.ts"
+        "dev": "tsx index.ts"
+    },
+    "devDependencies": {
+        "tsx": "^4.19.2"
     },
     "dependencies": {
         "socket.io": "^4.7.0",
