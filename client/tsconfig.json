@@ -4,7 +4,7 @@
     "module": "ESNext",
     "target": "es2020",
     "declaration": true,
-    "outDir": "./dist",
+    "outDir": ".",
     "lib": [
       "ESNext",
       "ES2020",
