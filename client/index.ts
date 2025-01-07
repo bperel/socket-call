@@ -270,7 +270,7 @@ export class SocketClient {
             await debugCall();
             const data = await socket!.emitWithAck(event, ...args);
 
-            if (typeof data === "object" && "error" in data) {
+            if (data && typeof data === "object" && "error" in data) {
               throw data;
             }
             await debugCall(true);
