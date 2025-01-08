@@ -10,9 +10,9 @@ const user = socket.addNamespace<UserEmitEvents, ClientListenEvents>(
   namespaces.USER
 );
 
-user.on.reminder = (message) => {
-  document.getElementById("messages")!.innerHTML += message + "<br />";
-}
+const log = (message: string) => {
+  document.getElementById("messages")!.innerHTML += `${message}<br />`;
+};
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <div>
@@ -31,8 +31,8 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
 document.getElementById("login-form")!.addEventListener("submit", (e) => {
   e.preventDefault();
   const username = document.getElementById("username") as HTMLInputElement;
-  user.events.login(username.value).then((res) => {
-    document.getElementById("messages")!.innerHTML += res + "<br />";
+  user.events.login(username.value).then((message) => {
+    log(message);
   });
 });
 
@@ -47,15 +47,13 @@ document.getElementById("run-process")!.addEventListener("click", () => {
 user.connect();
 
 user.on.reminder = (message) => {
-  document.getElementById("messages")!.innerHTML += message + "<br />";
+  log(message);
 }
 
 user.on.process = (id) => {
-  document.getElementById("messages")!.innerHTML +=
-    "Process started: " + id + "<br />";
+  log(`Process started: ${id}<br />`);
 };
 
 user.on.processEnd = (id) => {
-  document.getElementById("messages")!.innerHTML +=
-    "Process ended: " + id + "<br />";
+  log(`Process ended: ${id}<br />`);
 };
