@@ -20,8 +20,6 @@ export type UserServerSentEvents =
     reminder: (message: string) => void;
   };
 
-type UserSocket = Socket<object, UserServerSentEvents, object, SessionData>;
-
 const listenEvents = (socket: UserSocket) => ({
   login: async (username: string) => {
     socket.data.user = { username };
@@ -41,9 +39,11 @@ const listenEvents = (socket: UserSocket) => ({
   },
 });
 
+type UserSocket = Socket<typeof listenEvents, UserServerSentEvents, object, SessionData>;
+
 const { client, server } = useSocketEvents<
   typeof listenEvents,
-  Record<string, never>,
+  UserServerSentEvents,
   Record<string, never>,
   SessionData
 >(namespaces.USER, {

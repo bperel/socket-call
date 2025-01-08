@@ -1,8 +1,20 @@
-import { useUserSocketCall } from './useUserSocketCall';
+import { SocketClient } from 'socket-call-client';
+import namespaces from "../server/namespaces.ts";
+import {
+  ClientListenEvents,
+  type ClientEmitEvents as UserEmitEvents,
+} from "../server/user.ts";
 
-const { user } = useUserSocketCall();
+const socket = new SocketClient("http://localhost:3000");
+const user = socket.addNamespace<UserEmitEvents, ClientListenEvents>(
+  namespaces.USER
+);
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+user.on.reminder = (message) => {
+  document.getElementById("messages")!.innerHTML += message + "<br />";
+}
+
+document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <div>
   <h4>socket-call</h4>
   <form id="login-form">
@@ -16,34 +28,34 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </div>
 `;
 
-document.getElementById('login-form')!.addEventListener('submit', (e) => {
+document.getElementById("login-form")!.addEventListener("submit", (e) => {
   e.preventDefault();
-  const username = document.getElementById('username') as HTMLInputElement;
+  const username = document.getElementById("username") as HTMLInputElement;
   user.events.login(username.value).then((res) => {
-    document.getElementById('messages')!.innerHTML += res + '<br />';
-  })
+    document.getElementById("messages")!.innerHTML += res + "<br />";
+  });
 });
 
-document.getElementById('send-reminder')!.addEventListener('click', () => {
+document.getElementById("send-reminder")!.addEventListener("click", () => {
   user.events.sendReminderIn5Seconds();
 });
 
-document.getElementById('run-process')!.addEventListener('click', () => {
+document.getElementById("run-process")!.addEventListener("click", () => {
   user.events.runProcess();
 });
 
-user.connect()
+user.connect();
 
-user.on('reminder', (message) => {
-  document.getElementById('messages')!.innerHTML += message + '<br />';
-});
+user.on.reminder = (message) => {
+  document.getElementById("messages")!.innerHTML += message + "<br />";
+}
 
-user.on('process', (id) => {
-  document.getElementById('messages')!.innerHTML += 'Process started: ' +
-   id + '<br />';
-});
+user.on.process = (id) => {
+  document.getElementById("messages")!.innerHTML +=
+    "Process started: " + id + "<br />";
+};
 
-user.on('processEnd', (id) => {
-  document.getElementById('messages')!.innerHTML += 'Process ended: ' +
-   id + '<br />';
-});
+user.on.processEnd = (id) => {
+  document.getElementById("messages")!.innerHTML +=
+    "Process ended: " + id + "<br />";
+};

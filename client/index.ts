@@ -3,29 +3,6 @@ import type { CacheOptions } from "axios-cache-interceptor";
 import { io, type Socket } from "socket.io-client";
 import { Ref, ref } from "vue";
 
-// Copied from socket.io-client
-type DisconnectDescription =
-  | Error
-  | {
-      description: string;
-      context?: unknown;
-    };
-
-// Copied from socket.io-component-emitter
-type FallbackToUntypedListener<T> = [T] extends [never]
-  ? (...args: unknown[]) => void | Promise<void>
-  : T;
-
-// Copied from socket.io-client
-type SocketReservedEvents = {
-  connect: () => void;
-  connect_error: (err: Error) => void;
-  disconnect: (
-    reason: Socket.DisconnectReason,
-    description?: DisconnectDescription,
-  ) => void;
-};
-
 type SocketCacheOptions<Events extends EventsMap> = Pick<
   CacheOptions,
   "storage"
@@ -38,8 +15,6 @@ type EventsMap = Record<string, any>;
 
 type StringKeyOf<T> = keyof T & string;
 
-export type ServerSideEventCalls<S extends EventsMap> = S;
-
 export class SocketClient {
   constructor(private socketRootUrl: string) {}
 
@@ -51,7 +26,7 @@ export class SocketClient {
     }>(),
     run: async (
       loadCachedDataFn: () => Promise<void>,
-      loadRealDataFn: () => void,
+      loadRealDataFn: () => void
     ) => {
       this.cacheHydrator.state.value = {
         mode: "LOAD_CACHE",
@@ -73,7 +48,7 @@ export class SocketClient {
   public onConnectError = (
     e: Error,
     namespace: string,
-    _eventName?: string,
+    _eventName?: string
   ) => {
     console.error(`${namespace}: connect_error: ${e}`);
   };
@@ -83,7 +58,7 @@ export class SocketClient {
 
   public addNamespace<
     Events extends EventsMap,
-    ServerSentEvents extends EventsMap = object,
+    ServerSentEvents extends EventsMap = object
   >(
     namespaceName: string,
     namespaceOptions: {
@@ -98,15 +73,12 @@ export class SocketClient {
       cache?: Required<SocketCacheOptions<Events>> & {
         disableCache?: (eventName: StringKeyOf<Events>) => boolean;
       };
-    } = {},
+    } = {}
   ): {
     socket: Socket | undefined;
     connect: () => void;
     ongoingCalls: Ref<string[]>;
-    on: <E extends StringKeyOf<ServerSentEvents>>(
-      event: E,
-      callback: (...data: Parameters<ServerSentEvents[E]>) => void
-    ) => void;
+    on: ServerSentEvents;
     events: Events;
   } {
     const { session, cache } = namespaceOptions;
@@ -142,7 +114,7 @@ export class SocketClient {
         .on("connect", () => {
           isOffline = false;
           console.log(
-            `connected to ${namespaceName} at ${new Date().toISOString()}`,
+            `connected to ${namespaceName} at ${new Date().toISOString()}`
           );
 
           this.onConnected(namespaceName);
@@ -153,40 +125,33 @@ export class SocketClient {
       socket,
       connect,
       ongoingCalls,
-      on: <E extends StringKeyOf<ServerSentEvents>>(
-        event: E,
-        callback: (...data: Parameters<ServerSentEvents[E]>) => void,
-      ): void => {
-        socket?.on(
-          event,
-          callback as FallbackToUntypedListener<
-            E extends "connect" | "connect_error" | "disconnect"
-              ? SocketReservedEvents[E]
-              : E extends string
-                ? (...args: unknown[]) => void
-                : never
-          >,
-        );
-      },
+      on: new Proxy({} as ServerSentEvents, {
+        set: <EventName extends StringKeyOf<ServerSentEvents>>(
+          _: never,
+          event: EventName,
+          callback: ServerSentEvents[EventName]
+        ) => {
+          socket?.on(event, callback);
+          return true;
+        },
+      }),
       events: new Proxy({} as Events, {
         get:
-          <EventName extends StringKeyOf<Events>>(
-            _: never,
-            event: EventName,
-          ) =>
+          <EventName extends StringKeyOf<Events>>(_: never, event: EventName) =>
           async (
             ...args: Parameters<Events[EventName]>
           ): Promise<Awaited<ReturnType<Events[EventName]> | undefined>> => {
             let isCacheUsed = false;
             if (!socket) {
               console.log(
-                `connecting to ${namespaceName} at ${new Date().toISOString()}`,
+                `connecting to ${namespaceName} at ${new Date().toISOString()}`
               );
               connect();
             }
             const startTime = Date.now();
-            const shortEventConsoleString =
-              `${event}(${JSON.stringify(args).replace(/[\[\]]/g, "")})` as const;
+            const shortEventConsoleString = `${event}(${JSON.stringify(
+              args
+            ).replace(/[\[\]]/g, "")})` as const;
             const eventConsoleString = `${namespaceName}/${shortEventConsoleString}`;
             const debugCall = async (post: boolean = false, cached = false) => {
               const token = await session?.getToken();
@@ -195,16 +160,20 @@ export class SocketClient {
                   console.debug(`${eventConsoleString} served from cache`);
                 } else {
                   console.debug(
-                    `${eventConsoleString} ${post ? `responded in ${Date.now() - startTime}ms` : `called ${token ? "with token" : "without token"}`} at ${new Date().toISOString()}`,
+                    `${eventConsoleString} ${
+                      post
+                        ? `responded in ${Date.now() - startTime}ms`
+                        : `called ${token ? "with token" : "without token"}`
+                    } at ${new Date().toISOString()}`
                   );
 
                   if (post) {
                     ongoingCalls.value = ongoingCalls.value.filter(
-                      (call) => call !== shortEventConsoleString,
+                      (call) => call !== shortEventConsoleString
                     );
                   } else {
                     ongoingCalls.value = ongoingCalls.value.concat(
-                      shortEventConsoleString,
+                      shortEventConsoleString
                     );
                   }
                 }
@@ -220,8 +189,8 @@ export class SocketClient {
                     this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
                       ? undefined
                       : typeof cache.ttl === "function"
-                        ? cache.ttl(event, args)
-                        : cache.ttl,
+                      ? cache.ttl(event, args)
+                      : cache.ttl,
                 },
               });
               isCacheUsed =
@@ -233,13 +202,13 @@ export class SocketClient {
                   switch (this.cacheHydrator.state.value.mode) {
                     case "LOAD_CACHE":
                       this.cacheHydrator.state.value.cachedCallsDone.push(
-                        eventConsoleString,
+                        eventConsoleString
                       );
                       break;
                     case "HYDRATE":
                       if (
                         this.cacheHydrator.state.value.cachedCallsDone.includes(
-                          eventConsoleString,
+                          eventConsoleString
                         )
                       ) {
                         this.cacheHydrator.state.value
@@ -263,7 +232,7 @@ export class SocketClient {
                     }
                   : e,
                 namespaceName,
-                event,
+                event
               );
             });
 
@@ -285,7 +254,7 @@ export class SocketClient {
             if (
               this.cacheHydrator.state.value?.mode === "HYDRATE" &&
               this.cacheHydrator.state.value.cachedCallsDone.includes(
-                eventConsoleString,
+                eventConsoleString
               )
             ) {
               this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
@@ -294,7 +263,8 @@ export class SocketClient {
           },
       }),
     };
-  }}
+  }
+}
 
 export type { AxiosStorage } from "axios-cache-interceptor";
 export { buildStorage, buildWebStorage } from "axios-cache-interceptor";
