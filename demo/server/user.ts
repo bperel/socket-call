@@ -11,11 +11,11 @@ type SessionData = {
   };
 };
 
-export type UserServerSentLongRunningEvents = {
+type UserServerSentLongRunningEvents = {
   process: (processId: number) => void;
 };
 
-export type UserServerSentEvents =
+type UserServerSentEvents =
   ServerSentStartEndEvents<UserServerSentLongRunningEvents> & {
     reminder: (message: string) => void;
   };
