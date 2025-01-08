@@ -1,6 +1,6 @@
 {
   "name": "socket-call-server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "files": [
     "/index.js",
@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "publish": "tsc && npm publish"
+    "prepack": "tsc"
   },
   "dependencies": {
     "socket.io": "^4.8.1"
