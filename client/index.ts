@@ -26,11 +26,11 @@ type SocketReservedEvents = {
   ) => void;
 };
 
-type SocketCacheOptions<Services extends EventsMap> = Pick<
+type SocketCacheOptions<Events extends EventsMap> = Pick<
   CacheOptions,
   "storage"
 > & {
-  ttl: number | ((event: StringKeyOf<Services>, args: unknown[]) => number);
+  ttl: number | ((event: StringKeyOf<Events>, args: unknown[]) => number);
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -82,7 +82,7 @@ export class SocketClient {
   };
 
   public addNamespace<
-    Services extends EventsMap,
+    Events extends EventsMap,
     ServerSentEvents extends EventsMap = object,
   >(
     namespaceName: string,
@@ -95,8 +95,8 @@ export class SocketClient {
         clearSession: () => Promise<void> | void;
         sessionExists: () => Promise<boolean>;
       };
-      cache?: Required<SocketCacheOptions<Services>> & {
-        disableCache?: (eventName: StringKeyOf<Services>) => boolean;
+      cache?: Required<SocketCacheOptions<Events>> & {
+        disableCache?: (eventName: StringKeyOf<Events>) => boolean;
       };
     } = {},
   ): {
@@ -107,7 +107,7 @@ export class SocketClient {
       event: E,
       callback: (...data: Parameters<ServerSentEvents[E]>) => void
     ) => void;
-    services: Services;
+    events: Events;
   } {
     const { session, cache } = namespaceOptions;
     let socket: Socket | undefined;
@@ -168,15 +168,15 @@ export class SocketClient {
           >,
         );
       },
-      services: new Proxy({} as Services, {
+      events: new Proxy({} as Events, {
         get:
-          <EventName extends StringKeyOf<Services>>(
+          <EventName extends StringKeyOf<Events>>(
             _: never,
             event: EventName,
           ) =>
           async (
-            ...args: Parameters<Services[EventName]>
-          ): Promise<Awaited<ReturnType<Services[EventName]> | undefined>> => {
+            ...args: Parameters<Events[EventName]>
+          ): Promise<Awaited<ReturnType<Events[EventName]> | undefined>> => {
             let isCacheUsed = false;
             if (!socket) {
               console.log(

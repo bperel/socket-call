@@ -32,14 +32,14 @@ export type WithoutError<T> = T extends { error: any; errorDetails?: any }
 
 export type EventOutput<
   ClientEvents extends ReturnType<
-    typeof useSocketServices
+    typeof useSocketEvents
   >["client"]["emitEvents"],
   EventName extends keyof ClientEvents,
 > = Awaited<ReturnType<ClientEvents[EventName]>>;
 
 export type SuccessfulEventOutput<
   ClientEvents extends ReturnType<
-    typeof useSocketServices
+    typeof useSocketEvents
   >["client"]["emitEvents"],
   EventName extends keyof ClientEvents,
 > = WithoutError<EventOutput<ClientEvents, EventName>>;
@@ -51,7 +51,7 @@ type ServerSentEndEvents<Events extends { [event: string]: any }> = {
 export type ServerSentStartEndEvents<Events extends { [event: string]: any }> =
   Events & ServerSentEndEvents<Events>;
 
-export const useSocketServices = <
+export const useSocketEvents = <
   ListenEvents extends (
     socket: Socket<
       ReturnType<ListenEvents>,

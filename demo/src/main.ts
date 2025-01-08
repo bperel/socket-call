@@ -19,17 +19,17 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 document.getElementById('login-form')!.addEventListener('submit', (e) => {
   e.preventDefault();
   const username = document.getElementById('username') as HTMLInputElement;
-  user.services.login(username.value).then((res) => {
+  user.events.login(username.value).then((res) => {
     document.getElementById('messages')!.innerHTML += res + '<br />';
   })
 });
 
 document.getElementById('send-reminder')!.addEventListener('click', () => {
-  user.services.sendReminderIn5Seconds();
+  user.events.sendReminderIn5Seconds();
 });
 
 document.getElementById('run-process')!.addEventListener('click', () => {
-  user.services.runProcess();
+  user.events.runProcess();
 });
 
 user.connect()

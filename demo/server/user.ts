@@ -1,7 +1,7 @@
 import type { Socket } from "socket.io";
 import {
   ServerSentStartEndEvents,
-  useSocketServices,
+  useSocketEvents,
 } from "socket-call-server";
 import namespaces from "./namespaces";
 
@@ -41,7 +41,7 @@ const listenEvents = (socket: UserSocket) => ({
   },
 });
 
-const { client, server } = useSocketServices<
+const { client, server } = useSocketEvents<
   typeof listenEvents,
   Record<string, never>,
   Record<string, never>,
