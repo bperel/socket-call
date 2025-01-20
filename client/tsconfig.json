@@ -8,7 +8,7 @@
     "lib": [
       "ESNext",
       "ES2020",
-      "DOM"
+      "DOM",
     ],
     "strict": true,
     "esModuleInterop": true,
@@ -18,7 +18,10 @@
     "noUnusedLocals": true,
     "strictNullChecks": true,
     "allowJs": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": [
+      "jest"
+    ],
   },
   "include": [
     "./index.ts"

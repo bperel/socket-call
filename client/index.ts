@@ -17,6 +17,17 @@ type StringKeyOf<T> = keyof T & string;
 
 type SpecialProperties = "_socket" | "_connect" | "_ongoingCalls";
 
+type NamespaceProxyTargetInternal = {
+  _socket: Socket | undefined;
+  _connect: () => void;
+  _ongoingCalls: Ref<string[]>;
+};
+
+type NamespaceProxyTarget<
+  Events extends EventsMap,
+  ServerSentEvents extends EventsMap = object
+> = Events & ServerSentEvents & NamespaceProxyTargetInternal;
+
 export class SocketClient {
   constructor(private socketRootUrl: string) {}
 
@@ -76,12 +87,7 @@ export class SocketClient {
         disableCache?: (eventName: StringKeyOf<Events>) => boolean;
       };
     } = {}
-  ): {
-    _socket: Socket | undefined;
-    _connect: () => void;
-    _ongoingCalls: Ref<string[]>;
-  } & Events &
-    ServerSentEvents {
+  ): NamespaceProxyTarget<Events, ServerSentEvents> {
     const { session, cache } = namespaceOptions;
     let socket: Socket | undefined;
 
@@ -90,6 +96,7 @@ export class SocketClient {
     const ongoingCalls = ref<string[]>([]);
 
     const connect = () => {
+      console.log("connect");
       console.log(
         `connecting to ${namespaceName} at ${new Date().toISOString()}`
       );
@@ -125,50 +132,54 @@ export class SocketClient {
         });
     };
 
-    return new Proxy(
-      {} as Events & ServerSentEvents & "_socket" & "_connect" & "_ongoingCalls",
-      {
-        set: <EventName extends StringKeyOf<ServerSentEvents>>(
-          _: never,
-          event: EventName,
-          callback: ServerSentEvents[EventName]
-        ) => {
-          socket?.on(event, callback);
-          return true;
-        },
-        get: async <EventName extends SpecialProperties | StringKeyOf<Events>>(
-          _: never,
-          event: EventName,
-          ...args: unknown[]
-        ): Promise<
-          EventName extends "_socket"
-            ? typeof socket
-            : EventName extends "_connect"
-            ? ReturnType<typeof connect>
-            : EventName extends "_ongoingCalls"
-            ? typeof ongoingCalls
-            : Awaited<ReturnType<Events[EventName]> | undefined>
-        > => {
-          switch (event) {
+    type ProxyTarget = NamespaceProxyTarget<Events, ServerSentEvents>;
+
+    return new Proxy({} as ProxyTarget, {
+      set: <EventName extends StringKeyOf<ServerSentEvents>>(
+        _: never,
+        event: EventName,
+        callback: ServerSentEvents[EventName]
+      ) => {
+        socket?.on(event, callback);
+        return true;
+      },
+      get: <
+        EventNameOrSpecialProperty extends
+          | SpecialProperties
+          | StringKeyOf<Events>
+      >(
+        _: never,
+        prop: EventNameOrSpecialProperty,
+        ...args: unknown[]
+      ): EventNameOrSpecialProperty extends SpecialProperties
+        ? ProxyTarget[EventNameOrSpecialProperty]
+        : Promise<
+            Awaited<ReturnType<Events[EventNameOrSpecialProperty]> | undefined>
+          > => {
+            console.log(prop)
+          switch (prop) {
             case "_socket":
-              return Promise.resolve(socket) as any;
+              return socket as ProxyTarget["_socket"];
             case "_connect":
-              return Promise.resolve(connect()) as any;
+              return connect as ProxyTarget["_connect"];
             case "_ongoingCalls":
-              return Promise.resolve(ongoingCalls) as any;
+              return ongoingCalls as ProxyTarget["_ongoingCalls"];
+            case "__proto__": case "toJSON":
+              return null as any;
           }
 
+        return (async (..._args2: typeof args) => {
           if (!socket) {
             connect();
           }
           const startTime = Date.now();
-          const shortEventConsoleString = `${event}(${JSON.stringify(
+          const shortEventConsoleString = `${prop}(${JSON.stringify(
             args
           ).replace(/[\[\]]/g, "")})` as const;
           const eventConsoleString = `${namespaceName}/${shortEventConsoleString}`;
           const debugCall = async (post: boolean = false, cached = false) => {
             const token = await session?.getToken();
-            if (event !== "toJSON") {
+            if (prop !== "toJSON") {
               if (cached) {
                 console.debug(`${eventConsoleString} served from cache`);
               } else {
@@ -195,7 +206,8 @@ export class SocketClient {
           let isCacheUsed = false;
           let cacheKey;
           if (cache) {
-            cacheKey = `${namespaceName}/${event} ${JSON.stringify(args)}`;
+            console.log(prop)
+            cacheKey = `${namespaceName}/${prop} ${JSON.stringify(args)}`;
             const cacheData = await cache.storage.get(cacheKey, {
               cache: {
                 ttl:
@@ -203,7 +215,7 @@ export class SocketClient {
                   this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
                     ? undefined
                     : typeof cache.ttl === "function"
-                    ? cache.ttl(event, args)
+                    ? cache.ttl(prop, args)
                     : cache.ttl,
               },
             });
@@ -245,12 +257,12 @@ export class SocketClient {
                   }
                 : e,
               namespaceName,
-              event
+              prop
             );
           });
 
           await debugCall();
-          const data = await socket!.emitWithAck(event, ...args);
+          const data = await socket!.emitWithAck(prop, ...args);
 
           if (data && typeof data === "object" && "error" in data) {
             throw data;
@@ -260,7 +272,7 @@ export class SocketClient {
             cache.storage.set(cacheKey, data, {
               timeout:
                 typeof cache.ttl === "function"
-                  ? cache.ttl(event, args)
+                  ? cache.ttl(prop, args)
                   : cache.ttl,
             });
           }
@@ -272,9 +284,10 @@ export class SocketClient {
           ) {
             this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
           }
-          return data as any;
-        },      }
-    );
+          return data as ReturnType<Events[EventNameOrSpecialProperty]>;
+        });
+      },
+    });
   }
 }
 
