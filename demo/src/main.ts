@@ -31,29 +31,29 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
 document.getElementById("login-form")!.addEventListener("submit", (e) => {
   e.preventDefault();
   const username = document.getElementById("username") as HTMLInputElement;
-  user.events.login(username.value).then((message) => {
+  user.login(username.value).then((message) => {
     log(message);
   });
 });
 
 document.getElementById("send-reminder")!.addEventListener("click", () => {
-  user.events.sendReminderIn5Seconds();
+  user.sendReminderIn5Seconds();
 });
 
 document.getElementById("run-process")!.addEventListener("click", () => {
-  user.events.runProcess();
+  user.runProcess();
 });
 
-user.connect();
+user._connect();
 
-user.on.reminder = (message) => {
+user.reminder = (message) => {
   log(message);
 }
 
-user.on.process = (id) => {
+user.process = (id) => {
   log(`Process started: ${id}<br />`);
 };
 
-user.on.processEnd = (id) => {
+user.processEnd = (id) => {
   log(`Process ended: ${id}<br />`);
 };

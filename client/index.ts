@@ -15,6 +15,8 @@ type EventsMap = Record<string, any>;
 
 type StringKeyOf<T> = keyof T & string;
 
+type SpecialProperties = "_socket" | "_connect" | "_ongoingCalls";
+
 export class SocketClient {
   constructor(private socketRootUrl: string) {}
 
@@ -75,12 +77,11 @@ export class SocketClient {
       };
     } = {}
   ): {
-    socket: Socket | undefined;
-    connect: () => void;
-    ongoingCalls: Ref<string[]>;
-    on: ServerSentEvents;
-    events: Events;
-  } {
+    _socket: Socket | undefined;
+    _connect: () => void;
+    _ongoingCalls: Ref<string[]>;
+  } & Events &
+    ServerSentEvents {
     const { session, cache } = namespaceOptions;
     let socket: Socket | undefined;
 
@@ -89,6 +90,9 @@ export class SocketClient {
     const ongoingCalls = ref<string[]>([]);
 
     const connect = () => {
+      console.log(
+        `connecting to ${namespaceName} at ${new Date().toISOString()}`
+      );
       socket = io(this.socketRootUrl + namespaceName, {
         extraHeaders: {
           "X-Namespace": namespaceName,
@@ -121,11 +125,9 @@ export class SocketClient {
         });
     };
 
-    return {
-      socket,
-      connect,
-      ongoingCalls,
-      on: new Proxy({} as ServerSentEvents, {
+    return new Proxy(
+      {} as Events & ServerSentEvents & "_socket" & "_connect" & "_ongoingCalls",
+      {
         set: <EventName extends StringKeyOf<ServerSentEvents>>(
           _: never,
           event: EventName,
@@ -134,135 +136,145 @@ export class SocketClient {
           socket?.on(event, callback);
           return true;
         },
-      }),
-      events: new Proxy({} as Events, {
-        get:
-          <EventName extends StringKeyOf<Events>>(_: never, event: EventName) =>
-          async (
-            ...args: Parameters<Events[EventName]>
-          ): Promise<Awaited<ReturnType<Events[EventName]> | undefined>> => {
-            let isCacheUsed = false;
-            if (!socket) {
-              console.log(
-                `connecting to ${namespaceName} at ${new Date().toISOString()}`
-              );
-              connect();
-            }
-            const startTime = Date.now();
-            const shortEventConsoleString = `${event}(${JSON.stringify(
-              args
-            ).replace(/[\[\]]/g, "")})` as const;
-            const eventConsoleString = `${namespaceName}/${shortEventConsoleString}`;
-            const debugCall = async (post: boolean = false, cached = false) => {
-              const token = await session?.getToken();
-              if (event !== "toJSON") {
-                if (cached) {
-                  console.debug(`${eventConsoleString} served from cache`);
-                } else {
-                  console.debug(
-                    `${eventConsoleString} ${
-                      post
-                        ? `responded in ${Date.now() - startTime}ms`
-                        : `called ${token ? "with token" : "without token"}`
-                    } at ${new Date().toISOString()}`
+        get: async <EventName extends SpecialProperties | StringKeyOf<Events>>(
+          _: never,
+          event: EventName,
+          ...args: unknown[]
+        ): Promise<
+          EventName extends "_socket"
+            ? typeof socket
+            : EventName extends "_connect"
+            ? ReturnType<typeof connect>
+            : EventName extends "_ongoingCalls"
+            ? typeof ongoingCalls
+            : Awaited<ReturnType<Events[EventName]> | undefined>
+        > => {
+          switch (event) {
+            case "_socket":
+              return Promise.resolve(socket) as any;
+            case "_connect":
+              return Promise.resolve(connect()) as any;
+            case "_ongoingCalls":
+              return Promise.resolve(ongoingCalls) as any;
+          }
+
+          if (!socket) {
+            connect();
+          }
+          const startTime = Date.now();
+          const shortEventConsoleString = `${event}(${JSON.stringify(
+            args
+          ).replace(/[\[\]]/g, "")})` as const;
+          const eventConsoleString = `${namespaceName}/${shortEventConsoleString}`;
+          const debugCall = async (post: boolean = false, cached = false) => {
+            const token = await session?.getToken();
+            if (event !== "toJSON") {
+              if (cached) {
+                console.debug(`${eventConsoleString} served from cache`);
+              } else {
+                console.debug(
+                  `${eventConsoleString} ${
+                    post
+                      ? `responded in ${Date.now() - startTime}ms`
+                      : `called ${token ? "with token" : "without token"}`
+                  } at ${new Date().toISOString()}`
+                );
+
+                if (post) {
+                  ongoingCalls.value = ongoingCalls.value.filter(
+                    (call) => call !== shortEventConsoleString
                   );
-
-                  if (post) {
-                    ongoingCalls.value = ongoingCalls.value.filter(
-                      (call) => call !== shortEventConsoleString
-                    );
-                  } else {
-                    ongoingCalls.value = ongoingCalls.value.concat(
-                      shortEventConsoleString
-                    );
-                  }
+                } else {
+                  ongoingCalls.value = ongoingCalls.value.concat(
+                    shortEventConsoleString
+                  );
                 }
               }
-            };
-            let cacheKey;
-            if (cache) {
-              cacheKey = `${namespaceName}/${event} ${JSON.stringify(args)}`;
-              const cacheData = await cache.storage.get(cacheKey, {
-                cache: {
-                  ttl:
-                    isOffline ||
-                    this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
-                      ? undefined
-                      : typeof cache.ttl === "function"
-                      ? cache.ttl(event, args)
-                      : cache.ttl,
-                },
-              });
-              isCacheUsed =
-                cacheData !== undefined &&
-                !(typeof cacheData === "object" && cacheData.state === "empty");
-              if (isCacheUsed) {
-                debugCall(true, true);
-                if (this.cacheHydrator.state.value) {
-                  switch (this.cacheHydrator.state.value.mode) {
-                    case "LOAD_CACHE":
-                      this.cacheHydrator.state.value.cachedCallsDone.push(
-                        eventConsoleString
-                      );
-                      break;
-                    case "HYDRATE":
-                      if (
-                        this.cacheHydrator.state.value.cachedCallsDone.includes(
-                          eventConsoleString
-                        )
-                      ) {
-                        this.cacheHydrator.state.value
-                          .hydratedCallsDoneAmount++;
-                      }
-                      break;
-                  }
-                }
-                return cacheData as Awaited<ReturnType<Socket["emitWithAck"]>>;
-              }
             }
-
-            socket!.on("connect_error", (e) => {
-              isOffline = true;
-
-              this.onConnectError(
-                e.message === "websocket error"
-                  ? {
-                      message: "offline_no_cache",
-                      name: "offline_no_cache",
-                    }
-                  : e,
-                namespaceName,
-                event
-              );
-            });
-
-            await debugCall();
-            const data = await socket!.emitWithAck(event, ...args);
-
-            if (data && typeof data === "object" && "error" in data) {
-              throw data;
-            }
-            await debugCall(true);
-            if (cache && cacheKey) {
-              cache.storage.set(cacheKey, data, {
-                timeout:
-                  typeof cache.ttl === "function"
+          };
+          let isCacheUsed = false;
+          let cacheKey;
+          if (cache) {
+            cacheKey = `${namespaceName}/${event} ${JSON.stringify(args)}`;
+            const cacheData = await cache.storage.get(cacheKey, {
+              cache: {
+                ttl:
+                  isOffline ||
+                  this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
+                    ? undefined
+                    : typeof cache.ttl === "function"
                     ? cache.ttl(event, args)
                     : cache.ttl,
-              });
+              },
+            });
+            isCacheUsed =
+              cacheData !== undefined &&
+              !(typeof cacheData === "object" && cacheData.state === "empty");
+            if (isCacheUsed) {
+              debugCall(true, true);
+              if (this.cacheHydrator.state.value) {
+                switch (this.cacheHydrator.state.value.mode) {
+                  case "LOAD_CACHE":
+                    this.cacheHydrator.state.value.cachedCallsDone.push(
+                      eventConsoleString
+                    );
+                    break;
+                  case "HYDRATE":
+                    if (
+                      this.cacheHydrator.state.value.cachedCallsDone.includes(
+                        eventConsoleString
+                      )
+                    ) {
+                      this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
+                    }
+                    break;
+                }
+              }
+              return cacheData as any;
             }
-            if (
-              this.cacheHydrator.state.value?.mode === "HYDRATE" &&
-              this.cacheHydrator.state.value.cachedCallsDone.includes(
-                eventConsoleString
-              )
-            ) {
-              this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
-            }
-            return data;
-          },
-      }),
-    };
+          }
+
+          socket!.on("connect_error", (e) => {
+            isOffline = true;
+
+            this.onConnectError(
+              e.message === "websocket error"
+                ? {
+                    message: "offline_no_cache",
+                    name: "offline_no_cache",
+                  }
+                : e,
+              namespaceName,
+              event
+            );
+          });
+
+          await debugCall();
+          const data = await socket!.emitWithAck(event, ...args);
+
+          if (data && typeof data === "object" && "error" in data) {
+            throw data;
+          }
+          await debugCall(true);
+          if (cache && cacheKey) {
+            cache.storage.set(cacheKey, data, {
+              timeout:
+                typeof cache.ttl === "function"
+                  ? cache.ttl(event, args)
+                  : cache.ttl,
+            });
+          }
+          if (
+            this.cacheHydrator.state.value?.mode === "HYDRATE" &&
+            this.cacheHydrator.state.value.cachedCallsDone.includes(
+              eventConsoleString
+            )
+          ) {
+            this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
+          }
+          return data as any;
+        },      }
+    );
   }
 }
 
