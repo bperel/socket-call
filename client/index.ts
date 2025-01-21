@@ -149,14 +149,12 @@ export class SocketClient {
           | StringKeyOf<Events>
       >(
         _: never,
-        prop: EventNameOrSpecialProperty,
-        ...args: unknown[]
+        prop: EventNameOrSpecialProperty
       ): EventNameOrSpecialProperty extends SpecialProperties
         ? ProxyTarget[EventNameOrSpecialProperty]
-        : Promise<
+        : (...args: Parameters<Events[EventNameOrSpecialProperty]>) => Promise<
             Awaited<ReturnType<Events[EventNameOrSpecialProperty]> | undefined>
           > => {
-            console.log(prop)
           switch (prop) {
             case "_socket":
               return socket as ProxyTarget["_socket"];
@@ -168,7 +166,7 @@ export class SocketClient {
               return null as any;
           }
 
-        return (async (..._args2: typeof args) => {
+        return (async (...args: Parameters<Events[EventNameOrSpecialProperty]>) => {
           if (!socket) {
             connect();
           }
@@ -284,7 +282,7 @@ export class SocketClient {
           ) {
             this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
           }
-          return data as ReturnType<Events[EventNameOrSpecialProperty]>;
+          return data;
         });
       },
     });

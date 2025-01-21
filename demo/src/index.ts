@@ -1,4 +1,4 @@
-import { SocketClient } from 'socket-call-client';
+import { SocketClient } from '../../client/index.ts';
 import namespaces from "../server/namespaces.ts";
 import {
   ClientListenEvents,

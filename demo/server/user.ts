@@ -23,6 +23,7 @@ type UserServerSentEvents =
 const listenEvents = (socket: UserSocket) => ({
   login: async (username: string) => {
     socket.data.user = { username };
+    console.log(`User ${username} logged in`);
     return `You are now logged in ${username}!`;
   },
   sendReminderIn5Seconds: async () => {

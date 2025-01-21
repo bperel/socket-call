@@ -3,6 +3,7 @@ import { expect, describe, mock, beforeEach, it, jest } from "bun:test";
 
 const mockSocket = {
   io: jest.fn(() => ({
+    connect: jest.fn().mockReturnThis(),
     on: jest.fn().mockReturnThis(),
     onAny: jest.fn().mockReturnThis(),
     emit: jest.fn(),
