@@ -152,21 +152,27 @@ export class SocketClient {
         prop: EventNameOrSpecialProperty
       ): EventNameOrSpecialProperty extends SpecialProperties
         ? ProxyTarget[EventNameOrSpecialProperty]
-        : (...args: Parameters<Events[EventNameOrSpecialProperty]>) => Promise<
+        : (
+            ...args: Parameters<Events[EventNameOrSpecialProperty]>
+          ) => Promise<
             Awaited<ReturnType<Events[EventNameOrSpecialProperty]> | undefined>
           > => {
-          switch (prop) {
-            case "_socket":
-              return socket as ProxyTarget["_socket"];
-            case "_connect":
-              return connect as ProxyTarget["_connect"];
-            case "_ongoingCalls":
-              return ongoingCalls as ProxyTarget["_ongoingCalls"];
-            case "__proto__": case "toJSON":
-              return null as any;
-          }
+        switch (prop) {
+          case "_socket":
+            return socket as ProxyTarget["_socket"];
+          case "_connect":
+            return connect as ProxyTarget["_connect"];
+          case "_ongoingCalls":
+            return ongoingCalls as ProxyTarget["_ongoingCalls"];
+          case "__proto__":
+          case "toJSON":
+            return null as any;
+        }
 
-        return (async (...args: Parameters<Events[EventNameOrSpecialProperty]>) => {
+        // @ts-expect-error Unsure how to type this
+        return async (
+          ...args: Parameters<Events[EventNameOrSpecialProperty]>
+        ) => {
           if (!socket) {
             connect();
           }
@@ -204,7 +210,7 @@ export class SocketClient {
           let isCacheUsed = false;
           let cacheKey;
           if (cache) {
-            console.log(prop)
+            console.log(prop);
             cacheKey = `${namespaceName}/${prop} ${JSON.stringify(args)}`;
             const cacheData = await cache.storage.get(cacheKey, {
               cache: {
@@ -283,7 +289,7 @@ export class SocketClient {
             this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
           }
           return data;
-        });
+        }
       },
     });
   }

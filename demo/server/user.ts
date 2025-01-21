@@ -1,5 +1,6 @@
 import type { Socket } from "socket.io";
 import {
+  NamespaceProxyTarget,
   ServerSentStartEndEvents,
   useSocketEvents,
 } from "socket-call-server";
@@ -20,27 +21,34 @@ type UserServerSentEvents =
     reminder: (message: string) => void;
   };
 
-const listenEvents = (socket: UserSocket) => ({
+const listenEvents = (services: UserServices) => ({
   login: async (username: string) => {
-    socket.data.user = { username };
+    services._socket.data.user = { username };
     console.log(`User ${username} logged in`);
     return `You are now logged in ${username}!`;
   },
   sendReminderIn5Seconds: async () => {
     setTimeout(() => {
-      socket.emit("reminder", `Hey ${socket.data.user!.username}, you asked me to remind you!`);
+      services.reminder(
+        `Hey ${
+          services._socket.data.user!.username
+        }, you asked me to remind you!`
+      );
     }, 5000);
   },
   runProcess: async () => {
-    const processId = ~~(Math.random()*1000)
-    socket.emit("process", processId);
+    const processId = ~~(Math.random() * 1000);
+    services.process(processId);
     setTimeout(() => {
-      socket.emit("processEnd", processId);
+      services.processEnd(processId);
     }, 2000);
   },
 });
 
-type UserSocket = Socket<typeof listenEvents, UserServerSentEvents, object, SessionData>;
+type UserServices = NamespaceProxyTarget<
+  Socket<typeof listenEvents, UserServerSentEvents, object, SessionData>,
+  UserServerSentEvents
+>;
 
 const { client, server } = useSocketEvents<
   typeof listenEvents,
