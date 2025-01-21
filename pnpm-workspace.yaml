@@ -1,3 +1,5 @@
 packages:
   - client
   - server
+  - demo
+  - demo/server
