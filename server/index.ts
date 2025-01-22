@@ -1,4 +1,4 @@
-import type { Namespace, Server, Socket } from "socket.io";
+import type { ExtendedError, Server, Socket } from "socket.io";
 
 type AsyncEventsMap = {
   [event: string]: (...args: any[]) => Promise<any>;
@@ -62,7 +62,7 @@ const getProxy = <S extends Socket, EmitEvents extends EventsMap>(socket: S) =>
     get: <
       EventNameOrSpecialProperty extends "_socket" | (keyof EmitEvents & string)
     >(
-      target: NamespaceProxyTarget<S, EmitEvents>,
+      _: never,
       prop: EventNameOrSpecialProperty
     ): EventNameOrSpecialProperty extends "_socket"
       ? typeof socket
@@ -90,20 +90,18 @@ export const useSocketEvents = <
   endpoint: Parameters<Server["of"]>[0],
   options: {
     listenEvents: ListenEvents;
-    middlewares: Parameters<
-      Namespace<
-        ReturnType<ListenEvents>,
-        EmitEvents,
-        ServerSideEvents,
-        SocketData
-      >["use"]
-    >[0][];
+    middlewares: ((
+      services: NamespaceProxyTarget<Socket, EmitEvents>,
+      next: (err?: ExtendedError) => void
+    ) => void)[];
   }
 ) => ({
   server: (io: Server) => {
     const namespace = io.of(endpoint);
     for (const middleware of options?.middlewares ?? []) {
-      namespace.use(middleware);
+      namespace.use((socket, next) => {
+        middleware(getProxy<typeof socket, EmitEvents>(socket), next);
+      });
     }
 
     namespace.on("connection", (socket) => {
