@@ -1,7 +1,7 @@
 import type { Socket } from "socket.io";
 import {
-  NamespaceProxyTarget,
-  ServerSentStartEndEvents,
+  type NamespaceProxyTarget,
+  type ServerSentStartEndEvents,
   useSocketEvents,
 } from "socket-call-server";
 import namespaces from "./namespaces";

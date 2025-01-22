@@ -1,10 +1,7 @@
 import { Server } from "socket.io";
 import { server as user } from "./user";
-import { createServer } from "http";
 
-const httpServer = createServer();
-
-const io = new Server(httpServer, {
+const io = new Server({
   cors: {
     origin: "*",
   },
@@ -12,5 +9,5 @@ const io = new Server(httpServer, {
 
 user(io);
 
-httpServer.listen(3000);
+io.listen(3000);
 console.log("Server listening on port 3000");

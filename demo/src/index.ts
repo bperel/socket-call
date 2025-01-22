@@ -1,12 +1,12 @@
 import { SocketClient } from 'socket-call-client';
 import namespaces from "../server/namespaces.ts";
 import {
-  ClientListenEvents,
+  type ClientListenEvents as UserListenEvents,
   type ClientEmitEvents as UserEmitEvents,
 } from "../server/user.ts";
 
 const socket = new SocketClient("http://localhost:3000");
-const user = socket.addNamespace<UserEmitEvents, ClientListenEvents>(
+const user = socket.addNamespace<UserEmitEvents, UserListenEvents>(
   namespaces.USER
 );
 
