@@ -13,12 +13,12 @@ type SessionData = {
 };
 
 type UserServerSentLongRunningEvents = {
-  process: (processId: number) => void;
+  showProgress: (processId: number) => void;
 };
 
 type UserServerSentEvents =
   ServerSentStartEndEvents<UserServerSentLongRunningEvents> & {
-    reminder: (message: string) => void;
+    showReminder: (message: string) => void;
   };
 
 const listenEvents = (services: UserServices) => ({
@@ -29,7 +29,7 @@ const listenEvents = (services: UserServices) => ({
   },
   sendReminderIn5Seconds: async () => {
     setTimeout(() => {
-      services.reminder(
+      services.showReminder(
         `Hey ${
           services._socket.data.user!.username
         }, you asked me to remind you!`
@@ -38,9 +38,9 @@ const listenEvents = (services: UserServices) => ({
   },
   runProcess: async () => {
     const processId = ~~(Math.random() * 1000);
-    services.process(processId);
+    services.showProgress(processId);
     setTimeout(() => {
-      services.processEnd(processId);
+      services.showProgressEnd(processId);
     }, 2000);
   },
 });

@@ -46,14 +46,14 @@ document.getElementById("run-process")!.addEventListener("click", () => {
 
 user._connect();
 
-user.reminder = (message) => {
+user.showReminder = (message) => {
   log(message);
 }
 
-user.process = (id) => {
-  log(`Process started: ${id}<br />`);
+user.showProgress = (id) => {
+  log(`Process started: ${id}`);
 };
 
-user.processEnd = (id) => {
-  log(`Process ended: ${id}<br />`);
+user.showProgressEnd = (id) => {
+  log(`Process ended: ${id}`);
 };
