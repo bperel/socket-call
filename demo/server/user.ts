@@ -21,29 +21,30 @@ type UserServerSentEvents =
     showReminder: (message: string) => void;
   };
 
-const listenEvents = (services: UserServices) => ({
-  login: async (username: string) => {
-    services._socket.data.user = { username };
-    console.log(`User ${username} logged in`);
-    return `You are now logged in ${username}!`;
-  },
-  sendReminderIn5Seconds: async () => {
-    setTimeout(() => {
-      services.showReminder(
-        `Hey ${
-          services._socket.data.user!.username
-        }, you asked me to remind you!`
-      );
-    }, 5000);
-  },
-  runProcess: async () => {
-    const processId = ~~(Math.random() * 1000);
-    services.showProgress(processId);
-    setTimeout(() => {
-      services.showProgressEnd(processId);
-    }, 2000);
-  },
-});
+const listenEvents = (services: UserServices) => {
+  console.log("User namespace connected");
+  return ({
+    login: async (username: string) => {
+      services._socket.data.user = { username };
+      console.log(`User ${username} logged in`);
+      return `You are now logged in ${username}!`;
+    },
+    sendReminderIn5Seconds: async () => {
+      setTimeout(() => {
+        services.showReminder(
+          `Hey ${services._socket.data.user!.username}, you asked me to remind you!`
+        );
+      }, 5000);
+    },
+    runProcess: async () => {
+      const processId = ~~(Math.random() * 1000);
+      services.showProgress(processId);
+      setTimeout(() => {
+        services.showProgressEnd(processId);
+      }, 2000);
+    },
+  });
+};
 
 type UserServices = NamespaceProxyTarget<
   Socket<typeof listenEvents, UserServerSentEvents, object, SessionData>,
@@ -52,9 +53,7 @@ type UserServices = NamespaceProxyTarget<
 
 const { client, server } = useSocketEvents<
   typeof listenEvents,
-  UserServerSentEvents,
-  Record<string, never>,
-  SessionData
+  UserServerSentEvents
 >(namespaces.USER, {
   listenEvents,
   middlewares: [],

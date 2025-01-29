@@ -3,6 +3,22 @@ import type { CacheOptions } from "axios-cache-interceptor";
 import { io, type Socket } from "socket.io-client";
 import { Ref, ref } from "vue";
 
+export type WithoutError<T> = T extends { error: any; errorDetails?: any }
+  ? never
+  : T extends { error: any }
+  ? never
+  : T;
+
+export type EventOutput<
+  ClientEvents extends EventsMap,
+  EventName extends keyof ClientEvents
+> = Awaited<ReturnType<ClientEvents[EventName]>>;
+
+export type SuccessfulEventOutput<
+  ClientEvents extends EventsMap,
+  EventName extends keyof ClientEvents
+> = WithoutError<EventOutput<ClientEvents, EventName>>;
+
 type SocketCacheOptions<Events extends EventsMap> = Pick<
   CacheOptions,
   "storage"

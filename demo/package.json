@@ -1,18 +1,10 @@
 {
-    "name": "socket-call-client-demo",
+    "name": "socket-call-demo",
     "type": "module",
     "scripts": {
-        "dev": "concurrently -n frontend,backend 'vite' 'cd server && npm run dev'",
-        "build": "tsc && vite build",
-        "preview": "vite preview"
-    },
-    "dependencies": {
-        "axios-cache-interceptor": "^1.6.2",
-        "socket-call-client": "*"
+        "dev": "pnpm -r dev"
     },
     "devDependencies": {
-        "typescript": "~5.7.2",
-        "vite": "^6.0.7",
         "concurrently": "^9.1.2"
     }
 }

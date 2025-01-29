@@ -1,9 +1,9 @@
-import { SocketClient } from 'socket-call-client';
-import namespaces from "../server/namespaces.ts";
+import { EventOutput, SocketClient } from "socket-call-client";
+import namespaces from "../../server/namespaces.ts";
 import {
   type ClientListenEvents as UserListenEvents,
   type ClientEmitEvents as UserEmitEvents,
-} from "../server/user.ts";
+} from "../../server/user.ts";
 
 const socket = new SocketClient("http://localhost:3000");
 const user = socket.addNamespace<UserEmitEvents, UserListenEvents>(
@@ -14,25 +14,16 @@ const log = (message: string) => {
   document.getElementById("messages")!.innerHTML += `${message}<br />`;
 };
 
-document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
-  <div>
-  <h4>socket-call</h4>
-  <form id="login-form">
-  <input id="username" type="text" placeholder="username" />
-  <input type="submit" value="Login" />
-  </form>
-  <div><button id="send-reminder">Send me a reminder in 5 seconds</button></div>
-  <div><button id="run-process">Run a server process</button></div>
-  <br />
-  <div id="messages"></div>
-  </div>
-`;
-
 document.getElementById("login-form")!.addEventListener("submit", (e) => {
   e.preventDefault();
   const username = document.getElementById("username") as HTMLInputElement;
   user.login(username.value).then((message) => {
-    log(message);
+    //^login: (username: string) => Promise<string>
+
+    // We can use the EventOutput type to get the return type of the event
+    type Message = EventOutput<UserEmitEvents, "login">;
+    const myMessage: Message = message;
+    log(myMessage);
   });
 });
 
@@ -47,10 +38,12 @@ document.getElementById("run-process")!.addEventListener("click", () => {
 user._connect();
 
 user.showReminder = (message) => {
+  //                      ^ message: string
   log(message);
-}
+};
 
 user.showProgress = (id) => {
+  //                 ^ id: number
   log(`Process started: ${id}`);
 };
 

@@ -31,17 +31,17 @@ importers:
         version: 5.7.3
 
   demo:
-    dependencies:
-      axios-cache-interceptor:
-        specifier: ^1.6.2
-        version: 1.6.2(axios@1.7.9)
-      socket-call-client:
-        specifier: '*'
-        version: 0.3.0(axios-cache-interceptor@1.6.2(axios@1.7.9))(typescript@5.7.3)(vue@3.5.13(typescript@5.7.3))
     devDependencies:
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
+
+  demo/client:
+    dependencies:
+      socket-call-client:
+        specifier: workspace:*
+        version: link:../../client
+    devDependencies:
       typescript:
         specifier: ~5.7.2
         version: 5.7.3
@@ -52,8 +52,8 @@ importers:
   demo/server:
     dependencies:
       socket-call-server:
-        specifier: '*'
-        version: 0.3.0
+        specifier: workspace:*
+        version: link:../../server
       socket.io:
         specifier: ^4.7.0
         version: 4.8.1
@@ -1676,21 +1676,6 @@ packages:
   slash@3.0.0:
     resolution: {integrity: sha512-g9Q1haeby36OSStwb4ntCGGGaKsaVSjQ68fBxoQcutl5fS1vuY18H3wSt3jFyFtrkx+Kz0V1G85A4MyAdDMi2Q==}
     engines: {node: '>=8'}
-
-  socket-call-client@0.3.0:
-    resolution: {integrity: sha512-ZBcVmUzGAMgbdE16o6ce5mTTuEhK1ZdUhbTmBhsuYlGe3/+gMUVHLUcdNzvHxVEp3FAJV4eCgdfIecRHbKZ/fA==}
-    engines: {node: '>=22.0.0 <23.0.0'}
-    peerDependencies:
-      axios-cache-interceptor: ^1.6.2
-      typescript: ^5.3.3
-      vue: ^3.4.15
-    peerDependenciesMeta:
-      axios-cache-interceptor:
-        optional: true
-
-  socket-call-server@0.3.0:
-    resolution: {integrity: sha512-Q8zT1BiTg05lfabGBZ15MCBwXVEomRnEzmFUwnNVv7mi6uZ5J3jU8MOi1tWxhxzlFUqiSJH6vwmOdlTAjJteAw==}
-    engines: {node: '>=22.0.0 <23.0.0'}
 
   socket.io-adapter@2.5.5:
     resolution: {integrity: sha512-eLDQas5dzPgOWCk9GuuJC2lBqItuhKI4uxGgo9aIV7MYbk2h9Q6uULEh8WBzThoI7l+qU9Ast9fVUmkqPP9wYg==}
@@ -3736,26 +3721,6 @@ snapshots:
   sisteransi@1.0.5: {}
 
   slash@3.0.0: {}
-
-  socket-call-client@0.3.0(axios-cache-interceptor@1.6.2(axios@1.7.9))(typescript@5.7.3)(vue@3.5.13(typescript@5.7.3)):
-    dependencies:
-      socket.io-client: 4.8.1
-      typescript: 5.7.3
-      vue: 3.5.13(typescript@5.7.3)
-    optionalDependencies:
-      axios-cache-interceptor: 1.6.2(axios@1.7.9)
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
-  socket-call-server@0.3.0:
-    dependencies:
-      socket.io: 4.8.1
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
 
   socket.io-adapter@2.5.5:
     dependencies:

@@ -24,26 +24,6 @@ export type Errorable<T, ErrorKey extends string> = EitherOr<
   EitherOr<{ error: ErrorKey; errorDetails?: string }, ScopedError<ErrorKey>>
 >;
 
-export type WithoutError<T> = T extends { error: any; errorDetails?: any }
-  ? never
-  : T extends { error: any }
-  ? never
-  : T;
-
-export type EventOutput<
-  ClientEvents extends ReturnType<
-    typeof useSocketEvents
-  >["client"]["emitEvents"],
-  EventName extends keyof ClientEvents
-> = Awaited<ReturnType<ClientEvents[EventName]>>;
-
-export type SuccessfulEventOutput<
-  ClientEvents extends ReturnType<
-    typeof useSocketEvents
-  >["client"]["emitEvents"],
-  EventName extends keyof ClientEvents
-> = WithoutError<EventOutput<ClientEvents, EventName>>;
-
 type ServerSentEndEvents<Events extends { [event: string]: any }> = {
   [K in keyof Events & string as `${K}End`]: Events[K];
 };
@@ -83,9 +63,7 @@ export const useSocketEvents = <
   ListenEvents extends (
     services: NamespaceProxyTarget<Socket, EmitEvents>
   ) => AsyncEventsMap,
-  EmitEvents extends EventsMap = EventsMap,
-  ServerSideEvents extends EventsMap = EventsMap,
-  SocketData extends object = object
+  EmitEvents extends EventsMap = EventsMap
 >(
   endpoint: Parameters<Server["of"]>[0],
   options: {

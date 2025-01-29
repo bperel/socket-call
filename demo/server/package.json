@@ -9,6 +9,6 @@
     },
     "dependencies": {
         "socket.io": "^4.7.0",
-        "socket-call-server": "*"
+        "socket-call-server": "workspace:*"
     }
 }

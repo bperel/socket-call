@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>socket-call demo</title>
+  </head>
+  <body>
+    <div id="app">
+      <div>
+        <h4>socket-call</h4>
+        <form id="login-form">
+          <input id="username" type="text" placeholder="username" />
+          <input type="submit" value="Login" />
+        </form>
+        <div>
+          <button id="send-reminder">Send me a reminder in 5 seconds</button>
+        </div>
+        <div><button id="run-process">Run a server process</button></div>
+        <br />
+        <div id="messages"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/index.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+{
+    "name": "socket-call-client-demo",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build"
+    },
+    "dependencies": {
+        "socket-call-client": "workspace:*"
+    },
+    "devDependencies": {
+        "typescript": "~5.7.2",
+        "vite": "^6.0.7"
+    }
+}
