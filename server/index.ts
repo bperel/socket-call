@@ -1,5 +1,7 @@
 import type { ExtendedError, Server, Socket } from "socket.io";
 
+export type { Errorable, ScopedError } from "../util";
+
 type AsyncEventsMap = {
   [event: string]: (...args: any[]) => Promise<any>;
 };
