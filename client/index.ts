@@ -74,17 +74,17 @@ export class SocketClient {
       loadCachedDataFn: () => Promise<void>,
       loadRealDataFn: () => void
     ) => {
-      this.cacheHydrator.state.value = {
+      this.cacheHydrator.state = ref({
         mode: "LOAD_CACHE",
         cachedCallsDone: [],
         hydratedCallsDoneAmount: 0,
-      };
+      });
 
       console.debug("loading cache...");
       await loadCachedDataFn();
 
-      this.cacheHydrator.state.value.mode = "HYDRATE";
-      this.cacheHydrator.state.value.hydratedCallsDoneAmount = 0;
+      this.cacheHydrator.state.value!.mode = "HYDRATE";
+      this.cacheHydrator.state.value!.hydratedCallsDoneAmount = 0;
 
       console.debug("Hydrating...");
       loadRealDataFn();

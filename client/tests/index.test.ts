@@ -1,4 +1,5 @@
-import { SocketClient } from "../index";
+import { NotEmptyStorageValue } from "axios-cache-interceptor";
+import { AxiosStorage, SocketClient } from "../index";
 import { expect, describe, mock, beforeEach, it, jest } from "bun:test";
 
 const mockSocket = {
@@ -75,6 +76,79 @@ describe("SocketClient", () => {
       expect(namespace._socket!.emitWithAck).toHaveBeenCalledWith(
         "testEvent",
         "arg1"
+      );
+    });
+
+    it("should store and restore cached responses", async () => {
+      let cachedValue: Record<string, NotEmptyStorageValue> = {
+        'test-namespace/testEvent ["arg2"]': {
+          data: { data: "cached", headers: {}, status: 200, statusText: "OK" },
+          createdAt: 1,
+          state: "cached",
+          ttl: 1,
+        },
+      };
+      const storage: AxiosStorage = {
+        set: (key, data) => {
+          cachedValue[key] = data;
+        },
+        get: async (key) => cachedValue[key],
+        remove: () => jest.fn(),
+        clear: () => jest.fn(),
+      };
+      const namespace = socketClient.addNamespace("test-namespace", {
+        cache: {
+          ttl: 1,
+          storage,
+        },
+      });
+      const cachedResponse = await namespace.testEvent("arg2");
+      expect(cachedResponse.data.data).toEqual("cached");
+
+      const response = await namespace.testEvent("arg1");
+      expect(response).toEqual({ data: "test" });
+    });
+
+    it("should keep the state of the data loader", async () => {
+      let cachedValue: Record<string, NotEmptyStorageValue> = {
+        'test-namespace/testEvent ["arg2"]': {
+          data: { data: "cached", headers: {}, status: 200, statusText: "OK" },
+          createdAt: 1,
+          state: "cached",
+          ttl: 1,
+        },
+      };
+      const storage: AxiosStorage = {
+        set: (key, data) => {
+          cachedValue[key] = data;
+        },
+        get: async (key) => cachedValue[key],
+        remove: () => jest.fn(),
+        clear: () => jest.fn(),
+      };
+      const namespace = socketClient.addNamespace("test-namespace", {
+        cache: {
+          ttl: 1,
+          storage,
+        },
+      });
+
+      await socketClient.cacheHydrator.run(
+        () =>
+          namespace.testEvent("arg2").then(() => {
+            expect(
+              JSON.parse(
+                JSON.stringify(
+                  socketClient.cacheHydrator.state.value?.cachedCallsDone
+                )
+              )
+            ).toEqual(['test-namespace/testEvent("arg2")']);
+          }),
+        () => {
+          expect(
+            socketClient.cacheHydrator.state.value?.cachedCallsDone
+          ).toEqual([]);
+        }
       );
     });
   });
