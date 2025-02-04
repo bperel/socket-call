@@ -9,7 +9,7 @@
         "socket-call-client": "workspace:*"
     },
     "devDependencies": {
-        "typescript": "~5.7.2",
-        "vite": "^6.0.7"
+        "typescript": "~5.7.3",
+        "vite": "^6.0.11"
     }
 }

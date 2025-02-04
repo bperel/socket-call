@@ -7,9 +7,14 @@ const mockSocket = {
     connect: jest.fn().mockReturnThis(),
     on: jest.fn().mockReturnThis(),
     onAny: jest.fn().mockReturnThis(),
+    timeout: jest.fn().mockReturnThis(),
     emit: jest.fn(),
     emitWithAck: jest.fn().mockResolvedValue({ data: "test" }),
   })),
+};
+
+type TestEvents = {
+  testEvent: (arg: string) => Promise<{ data: { data: string } }>;
 };
 
 describe("SocketClient", () => {
@@ -41,7 +46,7 @@ describe("SocketClient", () => {
 
   describe("addNamespace", () => {
     it("should create namespace with basic configuration", () => {
-      const namespace = socketClient.addNamespace("test-namespace");
+      const namespace = socketClient.addNamespace<TestEvents>("test-namespace");
 
       expect(namespace).toBeDefined();
       expect(namespace._socket).toBeUndefined();
@@ -50,13 +55,16 @@ describe("SocketClient", () => {
 
     it("should handle connection with session token", () => {
       const mockToken = "test-token";
-      const namespace = socketClient.addNamespace("test-namespace", {
-        session: {
-          getToken: jest.fn().mockResolvedValue(mockToken),
-          clearSession: jest.fn(),
-          sessionExists: jest.fn().mockResolvedValue(true),
-        },
-      });
+      const namespace = socketClient.addNamespace<TestEvents>(
+        "test-namespace",
+        {
+          session: {
+            getToken: jest.fn().mockResolvedValue(mockToken),
+            clearSession: jest.fn(),
+            sessionExists: jest.fn().mockResolvedValue(true),
+          },
+        }
+      );
 
       namespace._connect();
 
@@ -70,8 +78,20 @@ describe("SocketClient", () => {
     });
 
     it("should handle an event call", async () => {
-      const namespace = socketClient.addNamespace("test-namespace");
+      const namespace = socketClient.addNamespace<TestEvents>("test-namespace");
       await namespace.testEvent("arg1");
+
+      expect(namespace._socket!.emitWithAck).toHaveBeenCalledWith(
+        "testEvent",
+        "arg1"
+      );
+    });
+
+    it("should handle an event call with a timeout", async () => {
+      const namespace = socketClient.addNamespace<TestEvents>("test-namespace");
+      await namespace.timeout(10).testEvent("arg1");
+
+      expect(namespace._socket!.timeout).toHaveBeenCalledWith(10);
 
       expect(namespace._socket!.emitWithAck).toHaveBeenCalledWith(
         "testEvent",
@@ -96,12 +116,15 @@ describe("SocketClient", () => {
         remove: () => jest.fn(),
         clear: () => jest.fn(),
       };
-      const namespace = socketClient.addNamespace("test-namespace", {
-        cache: {
-          ttl: 1,
-          storage,
-        },
-      });
+      const namespace = socketClient.addNamespace<TestEvents>(
+        "test-namespace",
+        {
+          cache: {
+            ttl: 1,
+            storage,
+          },
+        }
+      );
       const cachedResponse = await namespace.testEvent("arg2");
       expect(cachedResponse.data.data).toEqual("cached");
 
@@ -126,12 +149,15 @@ describe("SocketClient", () => {
         remove: () => jest.fn(),
         clear: () => jest.fn(),
       };
-      const namespace = socketClient.addNamespace("test-namespace", {
-        cache: {
-          ttl: 1,
-          storage,
-        },
-      });
+      const namespace = socketClient.addNamespace<TestEvents>(
+        "test-namespace",
+        {
+          cache: {
+            ttl: 1,
+            storage,
+          },
+        }
+      );
 
       await socketClient.cacheHydrator.run(
         () =>

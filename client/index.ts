@@ -50,8 +50,9 @@ type StringKeyOf<T> = keyof T & string;
 
 type SpecialProperties = "_socket" | "_connect" | "_ongoingCalls";
 
-type NamespaceProxyTargetInternal = {
+type NamespaceProxyTargetInternal<Events extends EventsMap> = {
   _socket: Socket | undefined;
+  timeout: (...args: Parameters<Socket["timeout"]>) => Events;
   _connect: () => void;
   _ongoingCalls: Ref<string[]>;
 };
@@ -59,7 +60,7 @@ type NamespaceProxyTargetInternal = {
 type NamespaceProxyTarget<
   Events extends EventsMap,
   ServerSentEvents extends EventsMap = object
-> = Events & ServerSentEvents & NamespaceProxyTargetInternal;
+> = Events & ServerSentEvents & NamespaceProxyTargetInternal<Events>;
 
 export class SocketClient {
   constructor(private socketRootUrl: string) {}
@@ -167,7 +168,7 @@ export class SocketClient {
 
     type ProxyTarget = NamespaceProxyTarget<Events, ServerSentEvents>;
 
-    return new Proxy({} as ProxyTarget, {
+    const proxyHandler = {
       set: <EventName extends StringKeyOf<ServerSentEvents>>(
         _: never,
         event: EventName,
@@ -197,6 +198,14 @@ export class SocketClient {
             return connect as ProxyTarget["_connect"];
           case "_ongoingCalls":
             return ongoingCalls as ProxyTarget["_ongoingCalls"];
+          case "timeout":
+            return ((...args: Parameters<Socket["timeout"]>) => {
+              if (!socket) {
+                connect();
+              }
+              console.log(socket);
+              return socket!.timeout(...args) as new Proxy({} as ProxyTarget, proxyHandler);
+            }) as any;
           case "__proto__":
           case "toJSON":
             return null as any;
@@ -324,7 +333,9 @@ export class SocketClient {
           return data;
         };
       },
-    });
+    };
+
+    return new Proxy({} as ProxyTarget, proxyHandler);
   }
 }
 

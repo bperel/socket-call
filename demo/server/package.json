@@ -8,7 +8,7 @@
         "tsx": "^4.19.2"
     },
     "dependencies": {
-        "socket.io": "^4.7.0",
-        "socket-call-server": "workspace:*"
+        "socket-call-server": "workspace:*",
+        "socket.io": "^4.8.1"
     }
 }
