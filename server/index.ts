@@ -34,16 +34,18 @@ type NamespaceProxyTargetInternal<Socket> = {
 
 export type NamespaceProxyTarget<
   Socket,
-  EmitEvents extends EventsMap
+  EmitEvents extends EventsMap,
 > = EmitEvents & NamespaceProxyTargetInternal<Socket>;
 
 const getProxy = <S extends Socket, EmitEvents extends EventsMap>(socket: S) =>
   new Proxy({} as NamespaceProxyTarget<S, EmitEvents>, {
     get: <
-      EventNameOrSpecialProperty extends "_socket" | (keyof EmitEvents & string)
+      EventNameOrSpecialProperty extends
+        | "_socket"
+        | (keyof EmitEvents & string),
     >(
       _: never,
-      prop: EventNameOrSpecialProperty
+      prop: EventNameOrSpecialProperty,
     ): EventNameOrSpecialProperty extends "_socket"
       ? typeof socket
       : (
@@ -61,18 +63,18 @@ export type ServerSentStartEndEvents<Events extends { [event: string]: any }> =
 
 export const useSocketEvents = <
   ListenEvents extends (
-    services: NamespaceProxyTarget<Socket, EmitEvents>
+    services: NamespaceProxyTarget<Socket, EmitEvents>,
   ) => AsyncEventsMap,
-  EmitEvents extends EventsMap = EventsMap
+  EmitEvents extends EventsMap = EventsMap,
 >(
   endpoint: Parameters<Server["of"]>[0],
   options: {
     listenEvents: ListenEvents;
     middlewares: ((
       services: NamespaceProxyTarget<Socket, EmitEvents>,
-      next: (err?: ExtendedError) => void
+      next: (err?: ExtendedError) => void,
     ) => void)[];
-  }
+  },
 ) => ({
   server: (io: Server) => {
     const namespace = io.of(endpoint);
@@ -84,7 +86,7 @@ export const useSocketEvents = <
 
     namespace.on("connection", (socket) => {
       const socketEventImplementations = options.listenEvents(
-        getProxy<typeof socket, EmitEvents>(socket)
+        getProxy<typeof socket, EmitEvents>(socket),
       );
       for (const eventName in socketEventImplementations) {
         socket.on(eventName, async (...args: unknown[]) => {

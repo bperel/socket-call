@@ -1,20 +1,20 @@
 {
-    // These tasks will run in order when initializing your CodeSandbox project.
-    "setupTasks": [
-        {
-            "name": "Setup",
-            "command": "cd demo && npm i && cd server && npm i"
-        }
-    ],
-    // These tasks can be run from CodeSandbox. Running one will open a log in the app.
-    "tasks": {
-        "Run demo": {
-            "name": "Run demo",
-            "command": "cd demo && npm run dev",
-            "runAtStart": true,
-            "preview": {
-                "port": 5173
-            }
-        }
+  // These tasks will run in order when initializing your CodeSandbox project.
+  "setupTasks": [
+    {
+      "name": "Setup",
+      "command": "cd demo && npm i && cd server && npm i"
     }
+  ],
+  // These tasks can be run from CodeSandbox. Running one will open a log in the app.
+  "tasks": {
+    "Run demo": {
+      "name": "Run demo",
+      "command": "cd demo && npm run dev",
+      "runAtStart": true,
+      "preview": {
+        "port": 5173
+      }
+    }
+  }
 }

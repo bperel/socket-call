@@ -7,7 +7,7 @@ import {
 
 const socket = new SocketClient("http://localhost:3000");
 const user = socket.addNamespace<UserEmitEvents, UserListenEvents>(
-  namespaces.USER
+  namespaces.USER,
 );
 
 const log = (message: string) => {
@@ -38,7 +38,7 @@ document.getElementById("run-process")!.addEventListener("click", () => {
 user._connect();
 
 user.showReminder = (message) => {
-  //                      ^ message: string
+  //                 ^ message: string
   log(message);
 };
 

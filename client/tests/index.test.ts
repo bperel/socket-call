@@ -65,7 +65,7 @@ describe("SocketClient", () => {
         expect.objectContaining({
           extraHeaders: { "X-Namespace": "test-namespace" },
           transports: ["websocket"],
-        })
+        }),
       );
     });
 
@@ -75,7 +75,7 @@ describe("SocketClient", () => {
 
       expect(namespace._socket!.emitWithAck).toHaveBeenCalledWith(
         "testEvent",
-        "arg1"
+        "arg1",
       );
     });
 
@@ -139,16 +139,16 @@ describe("SocketClient", () => {
             expect(
               JSON.parse(
                 JSON.stringify(
-                  socketClient.cacheHydrator.state.value?.cachedCallsDone
-                )
-              )
+                  socketClient.cacheHydrator.state.value?.cachedCallsDone,
+                ),
+              ),
             ).toEqual(['test-namespace/testEvent("arg2")']);
           }),
         () => {
           expect(
-            socketClient.cacheHydrator.state.value?.cachedCallsDone
+            socketClient.cacheHydrator.state.value?.cachedCallsDone,
           ).toEqual([]);
-        }
+        },
       );
     });
   });
@@ -166,7 +166,7 @@ describe("SocketClient", () => {
       socketClient.onConnectError(error, "test-namespace");
 
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("test-namespace: connect_error")
+        expect.stringContaining("test-namespace: connect_error"),
       );
     });
 

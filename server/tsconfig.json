@@ -5,10 +5,7 @@
     "target": "es2020",
     "declaration": true,
     "outDir": ".",
-    "lib": [
-      "ESNext",
-      "ES2020"
-    ],
+    "lib": ["ESNext", "ES2020"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -17,12 +14,8 @@
     "noUnusedLocals": true,
     "strictNullChecks": true,
     "allowJs": true,
-    "forceConsistentCasingInFileNames": true,
+    "forceConsistentCasingInFileNames": true
   },
-  "include": [
-    "index.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["index.ts"],
+  "exclude": ["node_modules"]
 }

@@ -23,17 +23,17 @@ export type Errorable<T, ErrorKey extends string> = EitherOr<
 export type WithoutError<T> = T extends { error: any; errorDetails?: any }
   ? never
   : T extends { error: any }
-  ? never
-  : T;
+    ? never
+    : T;
 
 export type EventOutput<
   ClientEvents extends EventsMap,
-  EventName extends keyof ClientEvents
+  EventName extends keyof ClientEvents,
 > = Awaited<ReturnType<ClientEvents[EventName]>>;
 
 export type SuccessfulEventOutput<
   ClientEvents extends EventsMap,
-  EventName extends keyof ClientEvents
+  EventName extends keyof ClientEvents,
 > = WithoutError<EventOutput<ClientEvents, EventName>>;
 
 type SocketCacheOptions<Events extends EventsMap> = Pick<
@@ -58,7 +58,7 @@ type NamespaceProxyTargetInternal = {
 
 type NamespaceProxyTarget<
   Events extends EventsMap,
-  ServerSentEvents extends EventsMap = object
+  ServerSentEvents extends EventsMap = object,
 > = Events & ServerSentEvents & NamespaceProxyTargetInternal;
 
 export class SocketClient {
@@ -72,7 +72,7 @@ export class SocketClient {
     }>(),
     run: async (
       loadCachedDataFn: () => Promise<void>,
-      loadRealDataFn: () => void
+      loadRealDataFn: () => void,
     ) => {
       this.cacheHydrator.state = ref({
         mode: "LOAD_CACHE",
@@ -94,7 +94,7 @@ export class SocketClient {
   public onConnectError = (
     e: Error,
     namespace: string,
-    _eventName?: string
+    _eventName?: string,
   ) => {
     console.error(`${namespace}: connect_error: ${e}`);
   };
@@ -104,7 +104,7 @@ export class SocketClient {
 
   public addNamespace<
     Events extends EventsMap,
-    ServerSentEvents extends EventsMap = object
+    ServerSentEvents extends EventsMap = object,
   >(
     namespaceName: string,
     namespaceOptions: {
@@ -119,7 +119,7 @@ export class SocketClient {
       cache?: Required<SocketCacheOptions<Events>> & {
         disableCache?: (eventName: StringKeyOf<Events>) => boolean;
       };
-    } = {}
+    } = {},
   ): NamespaceProxyTarget<Events, ServerSentEvents> {
     const { session, cache } = namespaceOptions;
     let socket: Socket | undefined;
@@ -131,7 +131,7 @@ export class SocketClient {
     const connect = () => {
       console.log("connect");
       console.log(
-        `connecting to ${namespaceName} at ${new Date().toISOString()}`
+        `connecting to ${namespaceName} at ${new Date().toISOString()}`,
       );
       socket = io(this.socketRootUrl + namespaceName, {
         extraHeaders: {
@@ -158,7 +158,7 @@ export class SocketClient {
         .on("connect", () => {
           isOffline = false;
           console.log(
-            `connected to ${namespaceName} at ${new Date().toISOString()}`
+            `connected to ${namespaceName} at ${new Date().toISOString()}`,
           );
 
           this.onConnected(namespaceName);
@@ -171,7 +171,7 @@ export class SocketClient {
       set: <EventName extends StringKeyOf<ServerSentEvents>>(
         _: never,
         event: EventName,
-        callback: ServerSentEvents[EventName]
+        callback: ServerSentEvents[EventName],
       ) => {
         socket?.on(event, callback);
         return true;
@@ -179,10 +179,10 @@ export class SocketClient {
       get: <
         EventNameOrSpecialProperty extends
           | SpecialProperties
-          | StringKeyOf<Events>
+          | StringKeyOf<Events>,
       >(
         _: never,
-        prop: EventNameOrSpecialProperty
+        prop: EventNameOrSpecialProperty,
       ): EventNameOrSpecialProperty extends SpecialProperties
         ? ProxyTarget[EventNameOrSpecialProperty]
         : (
@@ -211,7 +211,7 @@ export class SocketClient {
           }
           const startTime = Date.now();
           const shortEventConsoleString = `${prop}(${JSON.stringify(
-            args
+            args,
           ).replace(/[\[\]]/g, "")})` as const;
           const eventConsoleString = `${namespaceName}/${shortEventConsoleString}`;
           const debugCall = async (post: boolean = false, cached = false) => {
@@ -225,16 +225,16 @@ export class SocketClient {
                     post
                       ? `responded in ${Date.now() - startTime}ms`
                       : `called ${token ? "with token" : "without token"}`
-                  } at ${new Date().toISOString()}`
+                  } at ${new Date().toISOString()}`,
                 );
 
                 if (post) {
                   ongoingCalls.value = ongoingCalls.value.filter(
-                    (call) => call !== shortEventConsoleString
+                    (call) => call !== shortEventConsoleString,
                   );
                 } else {
                   ongoingCalls.value = ongoingCalls.value.concat(
-                    shortEventConsoleString
+                    shortEventConsoleString,
                   );
                 }
               }
@@ -252,8 +252,8 @@ export class SocketClient {
                   this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
                     ? undefined
                     : typeof cache.ttl === "function"
-                    ? cache.ttl(prop, args)
-                    : cache.ttl,
+                      ? cache.ttl(prop, args)
+                      : cache.ttl,
               },
             });
             isCacheUsed =
@@ -265,13 +265,13 @@ export class SocketClient {
                 switch (this.cacheHydrator.state.value.mode) {
                   case "LOAD_CACHE":
                     this.cacheHydrator.state.value.cachedCallsDone.push(
-                      eventConsoleString
+                      eventConsoleString,
                     );
                     break;
                   case "HYDRATE":
                     if (
                       this.cacheHydrator.state.value.cachedCallsDone.includes(
-                        eventConsoleString
+                        eventConsoleString,
                       )
                     ) {
                       this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
@@ -294,7 +294,7 @@ export class SocketClient {
                   }
                 : e,
               namespaceName,
-              prop
+              prop,
             );
           });
 
@@ -316,7 +316,7 @@ export class SocketClient {
           if (
             this.cacheHydrator.state.value?.mode === "HYDRATE" &&
             this.cacheHydrator.state.value.cachedCallsDone.includes(
-              eventConsoleString
+              eventConsoleString,
             )
           ) {
             this.cacheHydrator.state.value.hydratedCallsDoneAmount++;

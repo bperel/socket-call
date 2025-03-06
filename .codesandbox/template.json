@@ -1,8 +1,6 @@
 {
-    "title": "Demo",
-    "description": "socket-call demo",
-    "tags": [
-        "socket-call"
-    ],
-    "published": true
+  "title": "Demo",
+  "description": "socket-call demo",
+  "tags": ["socket-call"],
+  "published": true
 }

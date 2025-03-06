@@ -23,7 +23,7 @@ type UserServerSentEvents =
 
 const listenEvents = (services: UserServices) => {
   console.log("User namespace connected");
-  return ({
+  return {
     login: async (username: string) => {
       services._socket.data.user = { username };
       console.log(`User ${username} logged in`);
@@ -32,7 +32,7 @@ const listenEvents = (services: UserServices) => {
     sendReminderIn5Seconds: async () => {
       setTimeout(() => {
         services.showReminder(
-          `Hey ${services._socket.data.user!.username}, you asked me to remind you!`
+          `Hey ${services._socket.data.user!.username}, you asked me to remind you!`,
         );
       }, 5000);
     },
@@ -43,7 +43,7 @@ const listenEvents = (services: UserServices) => {
         services.showProgressEnd(processId);
       }, 2000);
     },
-  });
+  };
 };
 
 type UserServices = NamespaceProxyTarget<
