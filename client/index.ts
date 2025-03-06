@@ -9,22 +9,16 @@ export type ScopedError<ErrorKey extends string = string> = {
   selector: string;
 };
 
-export type EitherOr<A, B> = A | B extends object
-  ?
-      | (A & Partial<Record<Exclude<keyof B, keyof A>, never>>)
-      | (B & Partial<Record<Exclude<keyof A, keyof B>, never>>)
-  : A | B;
-
-export type Errorable<T, ErrorKey extends string> = EitherOr<
-  T,
-  EitherOr<{ error: ErrorKey; errorDetails?: string }, ScopedError<ErrorKey>>
->;
+export type Errorable<T, ErrorKey extends string> =
+  | T
+  | { error: ErrorKey; errorDetails?: string }
+  | ScopedError<ErrorKey>;
 
 export type WithoutError<T> = T extends { error: any; errorDetails?: any }
   ? never
   : T extends { error: any }
-    ? never
-    : T;
+  ? never
+  : T;
 
 export type EventOutput<
   ClientEvents extends EventsMap,
@@ -62,7 +56,7 @@ type NamespaceProxyTarget<
 > = Events & ServerSentEvents & NamespaceProxyTargetInternal;
 
 export class SocketClient {
-  constructor(private socketRootUrl: string) {}
+  constructor(private socketRootUrl: string) { }
 
   public cacheHydrator = {
     state: ref<{
@@ -178,18 +172,12 @@ export class SocketClient {
       },
       get: <
         EventNameOrSpecialProperty extends
-          | SpecialProperties
-          | StringKeyOf<Events>,
+        | SpecialProperties
+        | StringKeyOf<Events>,
       >(
         _: never,
         prop: EventNameOrSpecialProperty,
-      ): EventNameOrSpecialProperty extends SpecialProperties
-        ? ProxyTarget[EventNameOrSpecialProperty]
-        : (
-            ...args: Parameters<Events[EventNameOrSpecialProperty]>
-          ) => Promise<
-            Awaited<ReturnType<Events[EventNameOrSpecialProperty]> | undefined>
-          > => {
+      ) => {
         switch (prop) {
           case "_socket":
             return socket as ProxyTarget["_socket"];
@@ -202,7 +190,6 @@ export class SocketClient {
             return null as any;
         }
 
-        // @ts-expect-error Unsure how to type this
         return async (
           ...args: Parameters<Events[EventNameOrSpecialProperty]>
         ) => {
@@ -221,10 +208,9 @@ export class SocketClient {
                 console.debug(`${eventConsoleString} served from cache`);
               } else {
                 console.debug(
-                  `${eventConsoleString} ${
-                    post
-                      ? `responded in ${Date.now() - startTime}ms`
-                      : `called ${token ? "with token" : "without token"}`
+                  `${eventConsoleString} ${post
+                    ? `responded in ${Date.now() - startTime}ms`
+                    : `called ${token ? "with token" : "without token"}`
                   } at ${new Date().toISOString()}`,
                 );
 
@@ -249,7 +235,7 @@ export class SocketClient {
               cache: {
                 ttl:
                   isOffline ||
-                  this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
+                    this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
                     ? undefined
                     : typeof cache.ttl === "function"
                       ? cache.ttl(prop, args)
@@ -289,9 +275,9 @@ export class SocketClient {
             this.onConnectError(
               e.message === "websocket error"
                 ? {
-                    message: "offline_no_cache",
-                    name: "offline_no_cache",
-                  }
+                  message: "offline_no_cache",
+                  name: "offline_no_cache",
+                }
                 : e,
               namespaceName,
               prop,

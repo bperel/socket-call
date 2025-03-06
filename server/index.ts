@@ -6,16 +6,10 @@ export type ScopedError<ErrorKey extends string = string> = {
   selector: string;
 };
 
-export type EitherOr<A, B> = A | B extends object
-  ?
-      | (A & Partial<Record<Exclude<keyof B, keyof A>, never>>)
-      | (B & Partial<Record<Exclude<keyof A, keyof B>, never>>)
-  : A | B;
-
-export type Errorable<T, ErrorKey extends string> = EitherOr<
-  T,
-  EitherOr<{ error: ErrorKey; errorDetails?: string }, ScopedError<ErrorKey>>
->;
+export type Errorable<T, ErrorKey extends string> =
+  | T
+  | { error: ErrorKey; errorDetails?: string }
+  | ScopedError<ErrorKey>;
 
 type AsyncEventsMap = {
   [event: string]: (...args: any[]) => Promise<any>;
@@ -41,16 +35,16 @@ const getProxy = <S extends Socket, EmitEvents extends EventsMap>(socket: S) =>
   new Proxy({} as NamespaceProxyTarget<S, EmitEvents>, {
     get: <
       EventNameOrSpecialProperty extends
-        | "_socket"
-        | (keyof EmitEvents & string),
+      | "_socket"
+      | (keyof EmitEvents & string),
     >(
       _: never,
       prop: EventNameOrSpecialProperty,
     ): EventNameOrSpecialProperty extends "_socket"
       ? typeof socket
       : (
-          ...args: Parameters<EmitEvents[EventNameOrSpecialProperty]>
-        ) => boolean => {
+        ...args: Parameters<EmitEvents[EventNameOrSpecialProperty]>
+      ) => boolean => {
       if (prop === "_socket") {
         return socket as any; // TODO improve typing
       }
@@ -98,7 +92,7 @@ export const useSocketEvents = <
     });
   },
   client: {
-    emitEvents: {} as unknown as ReturnType<ListenEvents>,
-    listenEventsInterfaces: {} as unknown as EmitEvents,
+    emitEvents: {} as ReturnType<ListenEvents>,
+    listenEventsInterfaces: {} as EmitEvents,
   },
 });
