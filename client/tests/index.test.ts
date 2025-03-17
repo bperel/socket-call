@@ -1,5 +1,6 @@
 import { NotEmptyStorageValue } from "axios-cache-interceptor";
-import { AxiosStorage, SocketClient } from "../index";
+import { SocketClient } from "../index";
+import { AxiosStorage, CachePlugin } from "../plugins/cache";
 import { expect, describe, mock, beforeEach, it, jest } from "bun:test";
 
 const mockSocket = {
@@ -127,10 +128,10 @@ describe("SocketClient", () => {
         clear: () => jest.fn(),
       };
       const namespace = socketClient.addNamespace("test-namespace", {
-        cache: {
+        plugins: [new CachePlugin({
           ttl: 1,
           storage,
-        },
+        }),]
       });
 
       await socketClient.cacheHydrator.run(
