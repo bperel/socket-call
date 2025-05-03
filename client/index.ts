@@ -51,7 +51,7 @@ type NamespaceProxyTargetInternal = {
 };
 
 type AddDisableCache<T> = T extends (...args: infer Args) => infer Return
-  ? (...args: [...Args, { disableCache: true }] | Args) => Return
+  ? (...args: [...Args, { disableCache: boolean }] | Args) => Return
   : never;
 
 type NamespaceProxyTarget<
@@ -217,7 +217,10 @@ export class SocketClient {
 
           const lastArg = [...args].pop();
           const disableCache =
-            lastArg && typeof lastArg === "object" && "disableCache" in lastArg;
+            lastArg &&
+            typeof lastArg === "object" &&
+            "disableCache" in lastArg &&
+            lastArg.disableCache;
           if (disableCache) {
             args.pop();
           }
