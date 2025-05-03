@@ -17,8 +17,8 @@ export type Errorable<T, ErrorKey extends string> =
 export type WithoutError<T> = T extends { error: any; errorDetails?: any }
   ? never
   : T extends { error: any }
-  ? never
-  : T;
+    ? never
+    : T;
 
 export type EventOutput<
   ClientEvents extends EventsMap,
@@ -38,7 +38,7 @@ type SocketCacheOptions<Events extends EventsMap> = Pick<
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type EventsMap = Record<string, any>;
+type EventsMap = Record<string, (...args: any[]) => Promise<any>>;
 
 type StringKeyOf<T> = keyof T & string;
 
@@ -50,13 +50,23 @@ type NamespaceProxyTargetInternal = {
   _ongoingCalls: Ref<string[]>;
 };
 
+type AddDisableCache<T> = T extends (...args: infer Args) => infer Return
+  ? (...args: [...Args, { disableCache: true }] | Args) => Return
+  : never;
+
 type NamespaceProxyTarget<
   Events extends EventsMap,
-  ServerSentEvents extends EventsMap = object,
-> = Events & ServerSentEvents & NamespaceProxyTargetInternal;
+  ServerSentEvents extends Record<string, (...args: any[]) => void> = Record<
+    string,
+    never
+  >,
+> = {
+  [K in keyof Events]: AddDisableCache<Events[K]>;
+} & ServerSentEvents &
+  NamespaceProxyTargetInternal;
 
 export class SocketClient {
-  constructor(private socketRootUrl: string) { }
+  constructor(private socketRootUrl: string) {}
 
   public cacheHydrator = {
     state: ref<{
@@ -98,7 +108,10 @@ export class SocketClient {
 
   public addNamespace<
     Events extends EventsMap,
-    ServerSentEvents extends EventsMap = object,
+    ServerSentEvents extends Record<string, (...args: any[]) => void> = Record<
+      string,
+      never
+    >,
   >(
     namespaceName: string,
     namespaceOptions: {
@@ -167,13 +180,13 @@ export class SocketClient {
         event: EventName,
         callback: ServerSentEvents[EventName],
       ) => {
-        socket?.on(event, callback);
+        socket?.on(event, callback as any);
         return true;
       },
       get: <
         EventNameOrSpecialProperty extends
-        | SpecialProperties
-        | StringKeyOf<Events>,
+          | SpecialProperties
+          | StringKeyOf<Events>,
       >(
         _: never,
         prop: EventNameOrSpecialProperty,
@@ -190,13 +203,25 @@ export class SocketClient {
             return null as any;
         }
 
+        type EventParameters = Parameters<Events[EventNameOrSpecialProperty]>;
+
         return async (
-          ...args: Parameters<Events[EventNameOrSpecialProperty]>
+          ...args:
+            | [...EventParameters, { disableCache: true }]
+            | EventParameters
         ) => {
           if (!socket) {
             connect();
           }
           const startTime = Date.now();
+
+          const lastArg = [...args].pop();
+          const disableCache =
+            lastArg && typeof lastArg === "object" && "disableCache" in lastArg;
+          if (disableCache) {
+            args.pop();
+          }
+
           const shortEventConsoleString = `${prop}(${JSON.stringify(
             args,
           ).replace(/[\[\]]/g, "")})` as const;
@@ -208,9 +233,10 @@ export class SocketClient {
                 console.debug(`${eventConsoleString} served from cache`);
               } else {
                 console.debug(
-                  `${eventConsoleString} ${post
-                    ? `responded in ${Date.now() - startTime}ms`
-                    : `called ${token ? "with token" : "without token"}`
+                  `${eventConsoleString} ${
+                    post
+                      ? `responded in ${Date.now() - startTime}ms`
+                      : `called ${token ? "with token" : "without token"}`
                   } at ${new Date().toISOString()}`,
                 );
 
@@ -228,14 +254,13 @@ export class SocketClient {
           };
           let isCacheUsed = false;
           let cacheKey;
-          if (cache) {
-            console.log(prop);
+          if (cache && !disableCache) {
             cacheKey = `${namespaceName}/${prop} ${JSON.stringify(args)}`;
             const cacheData = await cache.storage.get(cacheKey, {
               cache: {
                 ttl:
                   isOffline ||
-                    this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
+                  this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
                     ? undefined
                     : typeof cache.ttl === "function"
                       ? cache.ttl(prop, args)
@@ -275,9 +300,9 @@ export class SocketClient {
             this.onConnectError(
               e.message === "websocket error"
                 ? {
-                  message: "offline_no_cache",
-                  name: "offline_no_cache",
-                }
+                    message: "offline_no_cache",
+                    name: "offline_no_cache",
+                  }
                 : e,
               namespaceName,
               prop,
