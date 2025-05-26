@@ -1,5 +1,5 @@
 import { NotEmptyStorageValue } from "axios-cache-interceptor";
-import { AxiosStorage, SocketClient, truncateLongStrings } from "../index";
+import { AxiosStorage, SocketClient, stringifyEventParameters } from "../index";
 import { expect, describe, mock, beforeEach, it, jest } from "bun:test";
 
 type ClientEvents = {
@@ -237,27 +237,39 @@ describe("SocketClient", () => {
     // });
   });
 
-  describe("truncateLongStrings", () => {
+  describe("stringifyEventParameters", () => {
     it("should truncate long strings", () => {
       const longString = "a".repeat(60);
-      const result = truncateLongStrings(longString);
-      expect(result).toBe("a".repeat(50) + "...");
+      const result = stringifyEventParameters([longString]);
+      expect(result).toBe(JSON.stringify("a".repeat(50) + "..."));
+    });
+
+    it("should truncate long objects", () => {
+      const input = {
+        short: "value",
+        long: "a".repeat(40),
+        nested: {
+          deeper: "b".repeat(40),
+        },
+      };
+      const result = stringifyEventParameters([input]);
+      expect(result).toBe(
+        '{"short":"value","long":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","nested":{"deeper":"bbbbbbbbbbbbb...',
+      );
     });
 
     it("should not truncate short strings", () => {
       const shortString = "hello";
-      const result = truncateLongStrings(shortString);
-      expect(result).toBe(shortString);
+      const result = stringifyEventParameters([shortString]);
+      expect(result).toBe(JSON.stringify(shortString));
     });
 
     it("should handle arrays recursively", () => {
       const input = ["short", "a".repeat(60), ["nested", "b".repeat(60)]];
-      const result = truncateLongStrings(input);
-      expect(result).toEqual([
-        "short",
-        "a".repeat(50) + "...",
-        ["nested", "b".repeat(50) + "..."],
-      ]);
+      const result = stringifyEventParameters([input]);
+      expect(result).toBe(
+        '["short","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...",["nested","bbbbbbbbbbbbbbbbbbbbbbbb...',
+      );
     });
 
     it("should handle objects recursively", () => {
@@ -265,17 +277,13 @@ describe("SocketClient", () => {
         short: "value",
         long: "a".repeat(60),
         nested: {
-          deeper: "b".repeat(60),
+          deep: "b".repeat(60),
         },
       };
-      const result = truncateLongStrings(input);
-      expect(result).toEqual({
-        short: "value",
-        long: "a".repeat(50) + "...",
-        nested: {
-          deeper: "b".repeat(50) + "...",
-        },
-      });
+      const result = stringifyEventParameters([input]);
+      expect(result).toBe(
+        '{"short":"value","long":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...","nested":{"deep":"bb...',
+      );
     });
 
     it("should preserve primitive types", () => {
@@ -285,8 +293,8 @@ describe("SocketClient", () => {
         null: null,
         string: "hello",
       };
-      const result = truncateLongStrings(input);
-      expect(result).toEqual(input);
+      const result = stringifyEventParameters([input]);
+      expect(result).toBe(JSON.stringify(input));
     });
   });
 });

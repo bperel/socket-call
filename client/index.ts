@@ -73,23 +73,33 @@ type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export const truncateLongStrings = (obj: JsonValue): JsonValue => {
+const formatValue = (obj: JsonValue): JsonValue => {
   if (typeof obj === "string") {
     return obj.length > 50 ? `${obj.slice(0, 50)}...` : obj;
   }
   if (Array.isArray(obj)) {
-    return obj.map(truncateLongStrings);
+    return obj.map(formatValue);
   }
   if (obj && typeof obj === "object") {
     return Object.entries(obj).reduce<{ [key: string]: JsonValue }>(
       (result, [key, value]) => ({
         ...result,
-        [key]: truncateLongStrings(value),
+        [key]: formatValue(value),
       }),
       {},
     );
   }
   return obj;
+};
+
+export const stringifyEventParameters = (args: JsonValue[]): string => {
+  let stringified = args
+    .map((arg) => JSON.stringify(formatValue(arg)))
+    .join(", ");
+  if (stringified.length > 100) {
+    stringified = stringified.substring(0, 100) + "...";
+  }
+  return stringified;
 };
 
 export class SocketClient {
@@ -252,9 +262,8 @@ export class SocketClient {
             args.pop();
           }
 
-          const shortEventConsoleString = `${eventName}(${JSON.stringify(
-            truncateLongStrings(args),
-          ).replace(/[\[\]]/g, "")})` as const;
+          const shortEventConsoleString =
+            `${eventName}(${stringifyEventParameters(args)})` as const;
           const eventConsoleString = `${namespaceName}/${shortEventConsoleString}`;
           const debugCall = async (post: boolean = false, cached = false) => {
             const token = await session?.getToken();
