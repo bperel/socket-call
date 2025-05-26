@@ -65,6 +65,33 @@ type NamespaceProxyTarget<
 } & ServerSentEvents &
   NamespaceProxyTargetInternal;
 
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export const truncateLongStrings = (obj: JsonValue): JsonValue => {
+  if (typeof obj === "string") {
+    return obj.length > 50 ? `${obj.slice(0, 50)}...` : obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(truncateLongStrings);
+  }
+  if (obj && typeof obj === "object") {
+    return Object.entries(obj).reduce<{ [key: string]: JsonValue }>(
+      (result, [key, value]) => ({
+        ...result,
+        [key]: truncateLongStrings(value),
+      }),
+      {},
+    );
+  }
+  return obj;
+};
+
 export class SocketClient {
   constructor(private socketRootUrl: string) {}
 
@@ -189,9 +216,9 @@ export class SocketClient {
           | StringKeyOf<Events>,
       >(
         _: never,
-        prop: EventNameOrSpecialProperty,
+        eventName: EventNameOrSpecialProperty,
       ) => {
-        switch (prop) {
+        switch (eventName) {
           case "_socket":
             return socket as ProxyTarget["_socket"];
           case "_connect":
@@ -225,13 +252,13 @@ export class SocketClient {
             args.pop();
           }
 
-          const shortEventConsoleString = `${prop}(${JSON.stringify(
-            args,
+          const shortEventConsoleString = `${eventName}(${JSON.stringify(
+            truncateLongStrings(args),
           ).replace(/[\[\]]/g, "")})` as const;
           const eventConsoleString = `${namespaceName}/${shortEventConsoleString}`;
           const debugCall = async (post: boolean = false, cached = false) => {
             const token = await session?.getToken();
-            if (prop !== "toJSON") {
+            if (eventName !== "toJSON") {
               if (cached) {
                 console.debug(`${eventConsoleString} served from cache`);
               } else {
@@ -258,7 +285,7 @@ export class SocketClient {
           let isCacheUsed = false;
           let cacheKey;
           if (cache && !disableCache) {
-            cacheKey = `${namespaceName}/${prop} ${JSON.stringify(args)}`;
+            cacheKey = `${namespaceName}/${eventName} ${JSON.stringify(args)}`;
             const cacheData = await cache.storage.get(cacheKey, {
               cache: {
                 ttl:
@@ -266,7 +293,7 @@ export class SocketClient {
                   this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
                     ? undefined
                     : typeof cache.ttl === "function"
-                      ? cache.ttl(prop, args)
+                      ? cache.ttl(eventName, args)
                       : cache.ttl,
               },
             });
@@ -308,12 +335,12 @@ export class SocketClient {
                   }
                 : e,
               namespaceName,
-              prop,
+              eventName,
             );
           });
 
           await debugCall();
-          const data = await socket!.emitWithAck(prop, ...args);
+          const data = await socket!.emitWithAck(eventName, ...args);
 
           if (data && typeof data === "object" && "error" in data) {
             throw data;
@@ -323,7 +350,7 @@ export class SocketClient {
             cache.storage.set(cacheKey, data, {
               timeout:
                 typeof cache.ttl === "function"
-                  ? cache.ttl(prop, args)
+                  ? cache.ttl(eventName, args)
                   : cache.ttl,
             });
           }

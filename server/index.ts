@@ -35,16 +35,16 @@ const getProxy = <S extends Socket, EmitEvents extends EventsMap>(socket: S) =>
   new Proxy({} as NamespaceProxyTarget<S, EmitEvents>, {
     get: <
       EventNameOrSpecialProperty extends
-      | "_socket"
-      | (keyof EmitEvents & string),
+        | "_socket"
+        | (keyof EmitEvents & string),
     >(
       _: never,
       prop: EventNameOrSpecialProperty,
     ): EventNameOrSpecialProperty extends "_socket"
       ? typeof socket
       : (
-        ...args: Parameters<EmitEvents[EventNameOrSpecialProperty]>
-      ) => boolean => {
+          ...args: Parameters<EmitEvents[EventNameOrSpecialProperty]>
+        ) => boolean => {
       if (prop === "_socket") {
         return socket as any; // TODO improve typing
       }

@@ -1,5 +1,5 @@
 import { NotEmptyStorageValue } from "axios-cache-interceptor";
-import { AxiosStorage, SocketClient } from "../index";
+import { AxiosStorage, SocketClient, truncateLongStrings } from "../index";
 import { expect, describe, mock, beforeEach, it, jest } from "bun:test";
 
 type ClientEvents = {
@@ -235,5 +235,58 @@ describe("SocketClient", () => {
 
     //   await expect(namespace.testEvent()).rejects.toEqual(error);
     // });
+  });
+
+  describe("truncateLongStrings", () => {
+    it("should truncate long strings", () => {
+      const longString = "a".repeat(60);
+      const result = truncateLongStrings(longString);
+      expect(result).toBe("a".repeat(50) + "...");
+    });
+
+    it("should not truncate short strings", () => {
+      const shortString = "hello";
+      const result = truncateLongStrings(shortString);
+      expect(result).toBe(shortString);
+    });
+
+    it("should handle arrays recursively", () => {
+      const input = ["short", "a".repeat(60), ["nested", "b".repeat(60)]];
+      const result = truncateLongStrings(input);
+      expect(result).toEqual([
+        "short",
+        "a".repeat(50) + "...",
+        ["nested", "b".repeat(50) + "..."],
+      ]);
+    });
+
+    it("should handle objects recursively", () => {
+      const input = {
+        short: "value",
+        long: "a".repeat(60),
+        nested: {
+          deeper: "b".repeat(60),
+        },
+      };
+      const result = truncateLongStrings(input);
+      expect(result).toEqual({
+        short: "value",
+        long: "a".repeat(50) + "...",
+        nested: {
+          deeper: "b".repeat(50) + "...",
+        },
+      });
+    });
+
+    it("should preserve primitive types", () => {
+      const input = {
+        number: 42,
+        boolean: true,
+        null: null,
+        string: "hello",
+      };
+      const result = truncateLongStrings(input);
+      expect(result).toEqual(input);
+    });
   });
 });

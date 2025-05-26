@@ -17,8 +17,8 @@
     "test": "bun test"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.4",
-    "typescript": "^5.8.2"
+    "@types/bun": "^1.2.14",
+    "typescript": "^5.8.3"
   },
   "dependencies": {
     "socket.io-client": "^4.8.1"

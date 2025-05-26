@@ -2,7 +2,10 @@
   "packageManager": "pnpm@9.8.0",
   "description": "",
   "type": "module",
+  "scripts": {
+    "prettier": "prettier --write ."
+  },
   "devDependencies": {
-    "prettier": "3.5.3"
+    "prettier": "^3.5.3"
   }
 }
