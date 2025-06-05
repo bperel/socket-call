@@ -80,7 +80,11 @@ const formatValue = (obj: JsonValue): JsonValue => {
   if (Array.isArray(obj)) {
     return obj.map(formatValue);
   }
-  if (obj && typeof obj === "object" && !Buffer.isBuffer(obj)) {
+  if (
+    obj &&
+    typeof obj === "object" &&
+    (typeof Buffer === "undefined" || !Buffer.isBuffer(obj))
+  ) {
     return Object.entries(obj).reduce<{ [key: string]: JsonValue }>(
       (result, [key, value]) => ({
         ...result,
