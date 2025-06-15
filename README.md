@@ -1,3 +1,7 @@
+### socket-call
+
+This small library on top of socket.io allows to call events like any regular async Typescript function.
+
 [Code Sandbox demo here!](https://codesandbox.io/p/github/bperel/socket-call/main)
 
 Usage example:
