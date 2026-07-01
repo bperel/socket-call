@@ -2,13 +2,10 @@
   "name": "socket-call-server-demo",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsx index.ts"
-  },
-  "devDependencies": {
-    "tsx": "^4.19.4"
+    "dev": "bun --watch index.ts"
   },
   "dependencies": {
     "socket-call-server": "workspace:*",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.3"
   }
 }

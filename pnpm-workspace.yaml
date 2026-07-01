@@ -4,3 +4,7 @@ packages:
   - server
   - demo
   - demo/*
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - vite@8.1.2
