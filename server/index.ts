@@ -7,9 +7,7 @@ export type ScopedError<ErrorKey extends string = string> = {
 };
 
 export type Errorable<T, ErrorKey extends string> =
-  | T
-  | { error: ErrorKey; errorDetails?: string }
-  | ScopedError<ErrorKey>;
+  T | { error: ErrorKey; errorDetails?: string } | ScopedError<ErrorKey>;
 
 type AsyncEventsMap = {
   [event: string]: (...args: any[]) => Promise<any>;
@@ -35,8 +33,7 @@ const getProxy = <S extends Socket, EmitEvents extends EventsMap>(socket: S) =>
   new Proxy({} as NamespaceProxyTarget<S, EmitEvents>, {
     get: <
       EventNameOrSpecialProperty extends
-        | "_socket"
-        | (keyof EmitEvents & string),
+        "_socket" | (keyof EmitEvents & string),
     >(
       _: never,
       prop: EventNameOrSpecialProperty,
@@ -55,34 +52,35 @@ const getProxy = <S extends Socket, EmitEvents extends EventsMap>(socket: S) =>
 export type ServerSentStartEndEvents<Events extends { [event: string]: any }> =
   Events & ServerSentEndEvents<Events>;
 
-/**
- * Anything that can emit an event: a connected `Socket`, a `Namespace`
- * (`io.of(ns)`) to broadcast to every socket in a namespace, or a Redis
- * emitter's broadcast operator (`emitter.of(ns)`) to broadcast from another
- * process.
- */
 export type EmitTarget = {
   emit: (event: string, ...args: any[]) => unknown;
 };
 
 /**
- * Build a typed proxy that emits server-sent events through any {@link EmitTarget},
- * without needing a live client connection. Use it to emit from HTTP handlers,
- * background workers, or any code that has an `io`/emitter but no per-socket
- * `services` object.
+ * Build a typed proxy that emits server-sent events through any
+ * {@link EmitTarget}, without needing a live client connection. Use it to emit
+ * from HTTP handlers, background workers, or any code that has an `io`/emitter
+ * but no per-socket `services` object.
+ *
+ * Pass an optional `socket` to also expose it as `_socket` on the returned
+ * proxy — useful when handlers reused across a socket path and an out-of-band
+ * path (e.g. an HTTP upload) read state from `_socket.data`. When provided, the
+ * return type gains `_socket` via {@link NamespaceProxyTarget}.
  */
-export const getServerSentEvents = <EmitEvents extends EventsMap>(
+export const getServerSentEvents = <EmitEvents extends EventsMap, S = never>(
   target: EmitTarget,
-) =>
+  socket?: S,
+): [S] extends [never] ? EmitEvents : NamespaceProxyTarget<S, EmitEvents> =>
   new Proxy({} as EmitEvents, {
-    get:
-      <EventName extends keyof EmitEvents & string>(
-        _: never,
-        prop: EventName,
-      ) =>
-      (...args: Parameters<EmitEvents[EventName]>) =>
-        target.emit(prop, ...args),
-  }) as EmitEvents;
+    get: <EventName extends keyof EmitEvents & string>(
+      _: never,
+      prop: EventName | "_socket",
+    ) =>
+      socket !== undefined && prop === "_socket"
+        ? socket
+        : (...args: Parameters<EmitEvents[EventName]>) =>
+            target.emit(prop, ...args),
+  }) as [S] extends [never] ? EmitEvents : NamespaceProxyTarget<S, EmitEvents>;
 
 export const useSocketEvents = <
   ListenEvents extends (

@@ -51,4 +51,28 @@ describe("getServerSentEvents", () => {
 
     expect(emitted).toEqual([["notify", "broadcast", 42]]);
   });
+
+  it("exposes the passed socket as _socket while still forwarding emits", () => {
+    const emit = mock(() => true);
+    const socket = { data: { user: "alice" }, nsp: { name: "/ns" } };
+    const events = getServerSentEvents<ServerEvents, typeof socket>(
+      { emit },
+      socket,
+    );
+
+    expect(events._socket).toBe(socket);
+    expect(events._socket.data.user).toBe("alice");
+
+    events.notify("hello", 1);
+    expect(emit).toHaveBeenCalledWith("notify", "hello", 1);
+  });
+
+  it("treats _socket as a normal event name when no socket is passed", () => {
+    const emit = mock(() => true);
+    const events = getServerSentEvents<ServerEvents>({ emit });
+
+    (events as any)._socket();
+
+    expect(emit).toHaveBeenCalledWith("_socket");
+  });
 });
