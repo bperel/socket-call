@@ -30,6 +30,45 @@ export type SuccessfulEventOutput<
   EventName extends keyof ClientEvents,
 > = WithoutError<EventOutput<ClientEvents, EventName>>;
 
+export type OnlyError<T> = T extends { error: any } ? T : never;
+
+export class SocketCallError<
+  Payload extends { error: string } = { error: string },
+> extends Error {
+  readonly payload: Payload;
+  readonly namespace: string;
+  readonly event: string;
+
+  constructor(namespace: string, event: string, payload: Payload) {
+    super(
+      "message" in payload && typeof payload.message === "string"
+        ? payload.message
+        : `${namespace}/${event}: ${payload.error}`,
+    );
+    this.name = "SocketCallError";
+    this.payload = payload;
+    this.namespace = namespace;
+    this.event = event;
+    Object.assign(this, payload);
+  }
+}
+
+export type ThrownEventError<T> = T extends unknown
+  ? SocketCallError<OnlyError<T>> & OnlyError<T>
+  : never;
+
+/** The payload thrown (not resolved) when a handler returns an `error` key. */
+export type EventError<
+  ClientEvents extends EventsMap,
+  EventName extends keyof ClientEvents,
+> = OnlyError<EventOutput<ClientEvents, EventName>>;
+
+export interface EventPromise<T, E> extends Promise<T> {
+  catch<R = never>(
+    onrejected?: ((reason: E) => R | PromiseLike<R>) | null,
+  ): Promise<T | R>;
+}
+
 type SocketCacheOptions<Events extends EventsMap> = Pick<
   CacheOptions,
   "storage"
@@ -50,8 +89,14 @@ type NamespaceProxyTargetInternal = {
   _ongoingCalls: Ref<string[]>;
 };
 
-type AddDisableCache<T> = T extends (...args: infer Args) => infer Return
-  ? (...args: [...Args, { disableCache: boolean }] | Args) => Return
+// The proxy throws any payload carrying an `error` key instead of resolving it,
+// so the error branch moves out of the resolved type and into the rejection type.
+type AddDisableCache<T> = T extends (
+  ...args: infer Args
+) => Promise<infer Return>
+  ? (
+      ...args: [...Args, { disableCache: boolean }] | Args
+    ) => EventPromise<WithoutError<Return>, ThrownEventError<Return>>
   : never;
 
 type NamespaceProxyTarget<
@@ -356,7 +401,7 @@ export class SocketClient {
           const data = await socket!.emitWithAck(eventName, ...args);
 
           if (data && typeof data === "object" && "error" in data) {
-            throw data;
+            throw new SocketCallError(namespaceName, eventName, data);
           }
           await debugCall(true);
           if (cache && cacheKey) {

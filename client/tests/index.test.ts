@@ -1,5 +1,12 @@
 import { NotEmptyStorageValue } from "axios-cache-interceptor";
-import { AxiosStorage, SocketClient, stringifyEventParameters } from "../index";
+import {
+  AxiosStorage,
+  SocketCallError,
+  SocketClient,
+  stringifyEventParameters,
+  type Errorable,
+  type ScopedError,
+} from "../index";
 import { expect, describe, mock, beforeEach, it, jest } from "bun:test";
 
 type ClientEvents = {
@@ -7,6 +14,9 @@ type ClientEvents = {
     arg1: string,
     options?: { disableCache?: boolean },
   ) => Promise<{ data: string }>;
+  failingEvent: (
+    arg1: string,
+  ) => Promise<Errorable<{ data: string }, "test error" | "invalid_username">>;
 };
 
 const mockSocket = {
@@ -19,8 +29,8 @@ const mockSocket = {
   })),
 };
 
-const removeTimestamps = ([log]: string) =>
-  log.replace(/ (?:in [^ ]+ )?at [^Z]+Z/, "");
+const removeTimestamps = ([log]: unknown[]) =>
+  String(log).replace(/ (?:in [^ ]+ )?at [^Z]+Z/, "");
 
 const buildAxiosStorage = (
   cachedValue: Record<string, NotEmptyStorageValue>,
@@ -33,8 +43,8 @@ const buildAxiosStorage = (
     console.log("getting cache", key);
     return cachedValue[key];
   },
-  remove: () => jest.fn(),
-  clear: () => jest.fn(),
+  remove: jest.fn(),
+  clear: jest.fn(),
 });
 
 describe("SocketClient", () => {
@@ -128,7 +138,11 @@ describe("SocketClient", () => {
           },
         },
       );
-      const cachedResponse = await namespace.testEvent("arg2");
+      // The cache path resolves the axios storage envelope rather than the
+      // stored value, so its shape differs from that of a fresh call.
+      const cachedResponse = (await namespace.testEvent("arg2")) as unknown as {
+        data: { data: string };
+      };
       expect(cachedResponse.data.data).toEqual("cached");
 
       const response = await namespace.testEvent("arg1");
@@ -223,18 +237,101 @@ describe("SocketClient", () => {
       );
     });
 
-    // it("should handle socket errors in namespace", async () => {
-    //   const namespace = socketClient.addNamespace<ClientEvents>(
-    //     "test-namespace",
-    //   );
-    //   const error = { error: "test error" };
+    const withAckResponse = (response: unknown) => {
+      mock.module("socket.io-client", () => ({
+        io: jest.fn(() => ({
+          connect: jest.fn().mockReturnThis(),
+          on: jest.fn().mockReturnThis(),
+          onAny: jest.fn().mockReturnThis(),
+          emit: jest.fn(),
+          emitWithAck: jest.fn().mockResolvedValue(response),
+        })),
+      }));
+      return new SocketClient("http://test.com/").addNamespace<ClientEvents>(
+        "test-namespace",
+      );
+    };
 
-    //   namespace._connect()
+    /** Resolves the rejection of `call`, narrowed to its payload type. */
+    const rejectionOf = async <P extends { error: string }>(
+      call: Promise<unknown>,
+    ): Promise<SocketCallError<P> & P> => {
+      try {
+        await call;
+      } catch (e) {
+        if (e instanceof SocketCallError) return e as SocketCallError<P> & P;
+        throw e;
+      }
+      throw new Error("expected the call to reject");
+    };
 
-    //   mockSocket.io.emitWithAck.mockResolvedValueOnce(error);
+    it("should reject an error payload as a SocketCallError", async () => {
+      const namespace = withAckResponse({ error: "test error" });
 
-    //   await expect(namespace.testEvent()).rejects.toEqual(error);
-    // });
+      const thrown = await rejectionOf(namespace.failingEvent("arg1"));
+
+      expect(thrown).toBeInstanceOf(SocketCallError);
+      expect(thrown).toBeInstanceOf(Error);
+      expect(thrown.name).toBe("SocketCallError");
+      expect(thrown.stack).toBeDefined();
+    });
+
+    it("should compose a message reporters can group on", async () => {
+      const namespace = withAckResponse({ error: "test error" });
+
+      const thrown = await rejectionOf(namespace.failingEvent("arg1"));
+
+      expect(thrown.message).toBe("test-namespace/failingEvent: test error");
+      expect(thrown.namespace).toBe("test-namespace");
+      expect(thrown.event).toBe("failingEvent");
+    });
+
+    it("should prefer a ScopedError's own message", async () => {
+      const namespace = withAckResponse({
+        error: "invalid_username",
+        message: "This username is already taken",
+        selector: "#username",
+      });
+
+      const thrown = await rejectionOf<ScopedError<"invalid_username">>(
+        namespace.failingEvent("arg1"),
+      );
+
+      expect(thrown.message).toBe("This username is already taken");
+      expect(thrown.selector).toBe("#username");
+    });
+
+    it("should keep the payload readable by destructuring", async () => {
+      const namespace = withAckResponse({
+        error: "test error",
+        errorDetails: "details",
+      });
+
+      const { error, errorDetails } = await rejectionOf<{
+        error: "test error";
+        errorDetails: string;
+      }>(namespace.failingEvent("arg1"));
+
+      expect(error).toBe("test error");
+      expect(errorDetails).toBe("details");
+    });
+
+    it("should expose the untouched payload", async () => {
+      const payload = { error: "test error", errorDetails: "details" };
+      const namespace = withAckResponse(payload);
+
+      const thrown = await rejectionOf(namespace.failingEvent("arg1"));
+
+      expect(thrown.payload).toEqual(payload);
+    });
+
+    it("should not reject a successful response", async () => {
+      const namespace = withAckResponse({ data: "ok" });
+
+      await expect(namespace.testEvent("arg1")).resolves.toEqual({
+        data: "ok",
+      });
+    });
   });
 
   describe("stringifyEventParameters", () => {
