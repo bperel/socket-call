@@ -125,3 +125,49 @@ user.showServerMessage = (message) => {
   console.log("Server sent us the message", message);
 };
 ```
+
+#### Caching
+
+Event responses can be cached per namespace. A cache needs a `storage` and a
+`ttl`, and then applies to every event of that namespace:
+
+```typescript
+import { SocketClient, buildWebStorage } from "socket-call-client";
+
+const socket = new SocketClient("http://localhost:3000");
+const user = socket.addNamespace<UserEmitEvents, UserListenEvents>("/user", {
+  cache: {
+    storage: buildWebStorage(localStorage, "socket-call:"),
+    ttl: 5 * 60 * 1000,
+    staleTtl: 24 * 60 * 60 * 1000,
+  },
+});
+```
+
+Entries are keyed by namespace, event name and arguments, so `user.getProfile(1)`
+and `user.getProfile(2)` are cached separately.
+
+`ttl` is how long a response is served from the cache instead of reaching the
+server. `staleTtl` extends that window, but the extension only applies while the
+connection is down or while `cacheHydrator` is priming the cache: an entry past
+its `ttl` is always refetched when the server is reachable. It is what lets an
+offline client keep working on data it already has. Leave `staleTtl` unset and
+expired entries are simply dropped.
+
+Both accept a function instead of a number when the duration depends on the
+event:
+
+```typescript
+const ttl = (event: string) => (event === "getProfile" ? 60_000 : 5_000);
+```
+
+Pass `{ disableCache: true }` as an extra last argument to bypass the cache for a
+single call — the argument is stripped before the event is sent:
+
+```typescript
+await user.getProfile(1, { disableCache: true });
+```
+
+`axios-cache-interceptor` is an optional peer dependency: it is only needed if
+you pass a `cache` option. `buildStorage` and `buildWebStorage` are re-exported
+from it.

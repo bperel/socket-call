@@ -69,12 +69,26 @@ export interface EventPromise<T, E> extends Promise<T> {
   ): Promise<T | R>;
 }
 
-type SocketCacheOptions<Events extends EventsMap> = Pick<
-  CacheOptions,
-  "storage"
-> & {
-  ttl: number | ((event: StringKeyOf<Events>, args: unknown[]) => number);
+type CacheDuration<Events extends EventsMap> =
+  number | ((event: StringKeyOf<Events>, args: unknown[]) => number);
+
+type SocketCacheOptions<Events extends EventsMap> = {
+  storage: NonNullable<CacheOptions["storage"]>;
+  ttl: CacheDuration<Events>;
+  /**
+   * How long past `ttl` an entry may still be served, but only while offline
+   * or while the cache hydrator is priming (`LOAD_CACHE`). Leave unset to drop
+   * entries as soon as they expire.
+   */
+  staleTtl?: CacheDuration<Events>;
 };
+
+const resolveDuration = <Events extends EventsMap>(
+  duration: CacheDuration<Events>,
+  eventName: StringKeyOf<Events>,
+  args: unknown[],
+): number =>
+  typeof duration === "function" ? duration(eventName, args) : duration;
 
 type EventsMap = Record<string, (...args: any[]) => Promise<any>>;
 
@@ -208,7 +222,7 @@ export class SocketClient {
         clearSession: () => Promise<void> | void;
         sessionExists: () => Promise<boolean>;
       };
-      cache?: Required<SocketCacheOptions<Events>> & {
+      cache?: SocketCacheOptions<Events> & {
         disableCache?: (eventName: StringKeyOf<Events>) => boolean;
       };
     } = {},
@@ -342,18 +356,16 @@ export class SocketClient {
           let cacheKey;
           if (cache && !disableCache) {
             cacheKey = `${namespaceName}/${eventName} ${JSON.stringify(args)}`;
-            const cacheData = await cache.storage.get(cacheKey, {
-              cache: {
-                ttl:
-                  isOffline ||
-                  this.cacheHydrator.state.value?.mode === "LOAD_CACHE"
-                    ? undefined
-                    : typeof cache.ttl === "function"
-                      ? cache.ttl(eventName, args)
-                      : cache.ttl,
-              },
-            });
-            if (cacheData?.state === "cached") {
+            const cacheData = await cache.storage.get(cacheKey);
+            // Past `ttl` the entry survives as "stale" for `staleTtl`, which is
+            // only good enough when we cannot reach the server anyway.
+            const mayUseStale =
+              isOffline ||
+              this.cacheHydrator.state.value?.mode === "LOAD_CACHE";
+            if (
+              cacheData?.state === "cached" ||
+              (mayUseStale && cacheData?.state === "stale")
+            ) {
               debugCall(true, true);
               if (this.cacheHydrator.state.value) {
                 switch (this.cacheHydrator.state.value.mode) {
@@ -403,10 +415,11 @@ export class SocketClient {
             cache.storage.set(cacheKey, {
               state: "cached",
               createdAt: Date.now(),
-              ttl:
-                typeof cache.ttl === "function"
-                  ? cache.ttl(eventName, args)
-                  : cache.ttl,
+              ttl: resolveDuration(cache.ttl, eventName, args),
+              staleTtl:
+                cache.staleTtl === undefined
+                  ? undefined
+                  : resolveDuration(cache.staleTtl, eventName, args),
               // `headers` is dereferenced unconditionally when reading a
               // "cached" entry, so it has to be present.
               data: { data, headers: {}, status: 200, statusText: "OK" },

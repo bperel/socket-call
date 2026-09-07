@@ -1,4 +1,8 @@
-import { NotEmptyStorageValue } from "axios-cache-interceptor";
+import {
+  buildMemoryStorage,
+  type CachedStorageValue,
+  type NotEmptyStorageValue,
+} from "axios-cache-interceptor";
 import {
   AxiosStorage,
   SocketCallError,
@@ -217,6 +221,164 @@ describe("SocketClient", () => {
             socketClient.cacheHydrator.state.value?.cachedCallsDone,
           ).toEqual([]);
         },
+      );
+    });
+  });
+
+  describe("cache expiry", () => {
+    const cacheKey = 'test-namespace/testEvent ["arg2"]';
+
+    /** A `cached` entry written `ageMs` ago, as the client itself writes them. */
+    const entry = (
+      payload: unknown,
+      ageMs: number,
+      ttl: number,
+      staleTtl?: number,
+    ): CachedStorageValue => ({
+      state: "cached",
+      createdAt: Date.now() - ageMs,
+      ttl,
+      staleTtl,
+      data: { data: payload, headers: {}, status: 200, statusText: "OK" },
+    });
+
+    /**
+     * Unlike `buildAxiosStorage`, a real memory storage runs the expiry rules,
+     * which is the only way `ttl` and `staleTtl` are observable at all.
+     */
+    const withMemoryStorage = ({
+      ttl,
+      staleTtl,
+      seed,
+      offline = false,
+    }: {
+      ttl: number | ((event: string, args: unknown[]) => number);
+      staleTtl?: number | ((event: string, args: unknown[]) => number);
+      seed?: CachedStorageValue;
+      offline?: boolean;
+    }) => {
+      mock.module("socket.io-client", () => ({
+        io: jest.fn(() => {
+          const socket: Record<string, unknown> = {
+            connect: jest.fn(() => socket),
+            onAny: jest.fn(() => socket),
+            emit: jest.fn(),
+            emitWithAck: jest.fn().mockResolvedValue({ data: "test" }),
+            on: jest.fn((event: string, handler: (e: Error) => void) => {
+              if (offline && event === "connect_error") {
+                handler(new Error("offline"));
+              }
+              return socket;
+            }),
+          };
+          return socket;
+        }),
+      }));
+
+      const storage = buildMemoryStorage();
+      const client = new SocketClient("http://test.com/");
+      const namespace = client.addNamespace<ClientEvents>("test-namespace", {
+        cache: { ttl, staleTtl, storage },
+      });
+      if (seed) storage.set(cacheKey, seed);
+      return { client, namespace, storage };
+    };
+
+    it("should write the configured ttl and staleTtl alongside the entry", async () => {
+      const { namespace, storage } = withMemoryStorage({
+        ttl: 5000,
+        staleTtl: 60000,
+      });
+
+      await namespace.testEvent("arg1");
+
+      const stored = await storage.get('test-namespace/testEvent ["arg1"]');
+      if (stored.state !== "cached") {
+        throw new Error(`expected a cached entry, got ${stored.state}`);
+      }
+      expect(stored.ttl).toBe(5000);
+      expect(stored.staleTtl).toBe(60000);
+      expect(stored.data.data).toEqual({ data: "test" });
+    });
+
+    it("should resolve ttl and staleTtl given as functions", async () => {
+      const { namespace, storage } = withMemoryStorage({
+        ttl: (event) => (event === "testEvent" ? 1234 : 0),
+        staleTtl: (_event, args) => (args.length === 1 ? 4321 : 0),
+      });
+
+      await namespace.testEvent("arg1");
+
+      const stored = await storage.get('test-namespace/testEvent ["arg1"]');
+      if (stored.state !== "cached") {
+        throw new Error(`expected a cached entry, got ${stored.state}`);
+      }
+      expect(stored.ttl).toBe(1234);
+      expect(stored.staleTtl).toBe(4321);
+    });
+
+    it("should serve an entry that is still within its ttl", async () => {
+      const { namespace } = withMemoryStorage({
+        ttl: 5000,
+        seed: entry({ data: "cached" }, 10, 5000),
+      });
+
+      expect(await namespace.testEvent("arg2")).toEqual({ data: "cached" });
+    });
+
+    it("should refetch once the ttl elapsed and no staleTtl is set", async () => {
+      const { namespace } = withMemoryStorage({
+        ttl: 100,
+        seed: entry({ data: "cached" }, 500, 100),
+      });
+
+      expect(await namespace.testEvent("arg2")).toEqual({ data: "test" });
+    });
+
+    it("should refetch an expired entry while online, even within staleTtl", async () => {
+      const { namespace } = withMemoryStorage({
+        ttl: 100,
+        staleTtl: 5000,
+        seed: entry({ data: "cached" }, 500, 100, 5000),
+      });
+
+      expect(await namespace.testEvent("arg2")).toEqual({ data: "test" });
+    });
+
+    it("should serve an expired entry within staleTtl while offline", async () => {
+      const { namespace } = withMemoryStorage({
+        ttl: 100,
+        staleTtl: 5000,
+        seed: entry({ data: "cached" }, 500, 100, 5000),
+        offline: true,
+      });
+
+      expect(await namespace.testEvent("arg2")).toEqual({ data: "cached" });
+    });
+
+    it("should refetch offline once staleTtl elapsed too", async () => {
+      const { namespace } = withMemoryStorage({
+        ttl: 100,
+        staleTtl: 5000,
+        seed: entry({ data: "cached" }, 9000, 100, 5000),
+        offline: true,
+      });
+
+      expect(await namespace.testEvent("arg2")).toEqual({ data: "test" });
+    });
+
+    it("should serve an expired entry within staleTtl while priming the cache", async () => {
+      const { client, namespace } = withMemoryStorage({
+        ttl: 100,
+        staleTtl: 5000,
+        seed: entry({ data: "cached" }, 500, 100, 5000),
+      });
+
+      await client.cacheHydrator.run(
+        async () => {
+          expect(await namespace.testEvent("arg2")).toEqual({ data: "cached" });
+        },
+        () => {},
       );
     });
   });
