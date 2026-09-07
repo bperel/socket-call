@@ -8,7 +8,7 @@ type ServerEvents = {
 
 describe("getServerSentEvents", () => {
   it("forwards a call to target.emit with the event name and args", () => {
-    const emit = mock(() => true);
+    const emit = mock((..._args: unknown[]) => true);
     const events = getServerSentEvents<ServerEvents>({ emit });
 
     events.notify("hello", 3);
@@ -18,7 +18,7 @@ describe("getServerSentEvents", () => {
   });
 
   it("emits the event name alone for no-arg events", () => {
-    const emit = mock(() => true);
+    const emit = mock((..._args: unknown[]) => true);
     const events = getServerSentEvents<ServerEvents>({ emit });
 
     events.ping();
@@ -27,7 +27,7 @@ describe("getServerSentEvents", () => {
   });
 
   it("uses the accessed property as the event name for each call", () => {
-    const emit = mock(() => true);
+    const emit = mock((..._args: unknown[]) => true);
     const events = getServerSentEvents<ServerEvents>({ emit });
 
     events.ping();
@@ -53,7 +53,7 @@ describe("getServerSentEvents", () => {
   });
 
   it("exposes the passed socket as _socket while still forwarding emits", () => {
-    const emit = mock(() => true);
+    const emit = mock((..._args: unknown[]) => true);
     const socket = { data: { user: "alice" }, nsp: { name: "/ns" } };
     const events = getServerSentEvents<ServerEvents, typeof socket>(
       { emit },
@@ -68,7 +68,7 @@ describe("getServerSentEvents", () => {
   });
 
   it("treats _socket as a normal event name when no socket is passed", () => {
-    const emit = mock(() => true);
+    const emit = mock((..._args: unknown[]) => true);
     const events = getServerSentEvents<ServerEvents>({ emit });
 
     (events as any)._socket();

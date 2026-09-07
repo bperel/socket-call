@@ -1,9 +1,11 @@
 import type { Socket } from "socket.io";
+import { z } from "zod";
 import {
   type NamespaceProxyTarget,
   type ServerSentStartEndEvents,
   useSocketEvents,
 } from "socket-call-server";
+import { ev } from "socket-call-server/zod";
 import namespaces from "./namespaces";
 
 type SessionData = {
@@ -24,11 +26,11 @@ type UserServerSentEvents =
 const listenEvents = (services: UserServices) => {
   console.log("User namespace connected");
   return {
-    login: async (username: string) => {
+    login: ev(z.string().min(3))(async (username) => {
       services._socket.data.user = { username };
       console.log(`User ${username} logged in`);
       return `You are now logged in ${username}!`;
-    },
+    }),
     sendReminderIn5Seconds: async () => {
       setTimeout(() => {
         services.showReminder(

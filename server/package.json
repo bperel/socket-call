@@ -4,7 +4,9 @@
   "type": "module",
   "files": [
     "/index.js",
-    "/index.d.ts"
+    "/index.d.ts",
+    "/zod.js",
+    "/zod.d.ts"
   ],
   "main": "index.ts",
   "types": "index.d.ts",
@@ -14,13 +16,23 @@
   "scripts": {
     "build": "tsc",
     "prepack": "tsc",
-    "test": "bun test"
+    "test": "pnpm test:types && bun test",
+    "test:types": "tsc --noEmit -p tests/tsconfig.json"
   },
   "dependencies": {
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "zod": "^4.5.4"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
   }
 }

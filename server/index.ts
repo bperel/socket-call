@@ -1,5 +1,15 @@
 import type { ExtendedError, Server, Socket } from "socket.io";
 
+/** `error` sent to the client when a handler's input or output fails validation. */
+export const VALIDATION_ERROR = "VALIDATION_ERROR";
+/** `error` sent to the client when a handler throws for any other reason. */
+export const INTERNAL_ERROR = "INTERNAL_ERROR";
+
+export type EventErrorPayload = {
+  error: typeof VALIDATION_ERROR | typeof INTERNAL_ERROR;
+  errorDetails?: string;
+};
+
 export type ScopedError<ErrorKey extends string = string> = {
   error: ErrorKey;
   message: string;
@@ -82,6 +92,43 @@ export const getServerSentEvents = <EmitEvents extends EventsMap, S = never>(
             target.emit(prop, ...args),
   }) as [S] extends [never] ? EmitEvents : NamespaceProxyTarget<S, EmitEvents>;
 
+type Issue = { message: string; path?: readonly unknown[] };
+
+/**
+ * Structural test for a validation failure, duck-typed on the `issues` array
+ * that every Standard Schema library throws. Keeps socket-call free of any
+ * dependency on Zod, Valibot or the like.
+ */
+const isValidationError = (e: unknown): e is { issues: Issue[] } =>
+  typeof e === "object" &&
+  e !== null &&
+  Array.isArray((e as { issues?: unknown }).issues);
+
+/** Standard Schema allows both bare keys and `{ key }` wrappers in a path. */
+const formatPathSegment = (segment: unknown) =>
+  typeof segment === "object" && segment !== null && "key" in segment
+    ? String((segment as { key: unknown }).key)
+    : String(segment);
+
+const formatIssues = (issues: Issue[]) =>
+  issues
+    .map(({ path, message }) =>
+      path?.length
+        ? `${path.map(formatPathSegment).join(".")}: ${message}`
+        : message,
+    )
+    .join("; ");
+
+/**
+ * Handler failures never reach the client verbatim: a validation error is
+ * reported with its issues, anything else stays opaque so that internal
+ * messages are not leaked.
+ */
+const toErrorPayload = (e: unknown): EventErrorPayload =>
+  isValidationError(e)
+    ? { error: VALIDATION_ERROR, errorDetails: formatIssues(e.issues) }
+    : { error: INTERNAL_ERROR };
+
 export const useSocketEvents = <
   ListenEvents extends (
     services: NamespaceProxyTarget<Socket, EmitEvents>,
@@ -91,6 +138,8 @@ export const useSocketEvents = <
   endpoint: Parameters<Server["of"]>[0],
   options: {
     listenEvents: ListenEvents;
+    /** Called for every handler failure, before the error payload is acked. */
+    onEventError?: (eventName: string, error: unknown) => void;
     middlewares: ((
       services: NamespaceProxyTarget<Socket, EmitEvents>,
       next: (err?: ExtendedError) => void,
@@ -111,9 +160,28 @@ export const useSocketEvents = <
       );
       for (const eventName in socketEventImplementations) {
         socket.on(eventName, async (...args: unknown[]) => {
-          const callback = args.pop() as Function;
-          const output = await socketEventImplementations[eventName](...args);
-          callback(output);
+          // Only pop an actual ack callback: socket.io omits it when the
+          // client emits without expecting a reply.
+          const callback =
+            typeof args.at(-1) === "function"
+              ? (args.pop() as (output: unknown) => void)
+              : undefined;
+          try {
+            // Awaited on its own line: `callback?.(await …)` would short-circuit
+            // the whole expression when there is no ack callback, never running
+            // the handler at all.
+            const output = await socketEventImplementations[eventName](...args);
+            callback?.(output);
+          } catch (e) {
+            // Letting this reject would surface as an unhandled rejection
+            // (fatal on Node) and leave the caller's promise pending forever.
+            if (options.onEventError) {
+              options.onEventError(eventName, e);
+            } else {
+              console.error(`${String(endpoint)}/${eventName} threw`, e);
+            }
+            callback?.(toErrorPayload(e));
+          }
         });
       }
     });

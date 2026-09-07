@@ -15,6 +15,6 @@
     "allowJs": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["index.ts"],
+  "include": ["index.ts", "zod.ts"],
   "exclude": ["node_modules"]
 }
