@@ -122,7 +122,12 @@ describe("SocketClient", () => {
     it("should store and restore cached responses", async () => {
       let cachedValue: Record<string, NotEmptyStorageValue> = {
         'test-namespace/testEvent ["arg2"]': {
-          data: { data: "cached", headers: {}, status: 200, statusText: "OK" },
+          data: {
+            data: { data: "cached" },
+            headers: {},
+            status: 200,
+            statusText: "OK",
+          },
           createdAt: 1,
           state: "cached",
           ttl: 1,
@@ -138,12 +143,8 @@ describe("SocketClient", () => {
           },
         },
       );
-      // The cache path resolves the axios storage envelope rather than the
-      // stored value, so its shape differs from that of a fresh call.
-      const cachedResponse = (await namespace.testEvent("arg2")) as unknown as {
-        data: { data: string };
-      };
-      expect(cachedResponse.data.data).toEqual("cached");
+      const cachedResponse = await namespace.testEvent("arg2");
+      expect(cachedResponse).toEqual({ data: "cached" });
 
       const response = await namespace.testEvent("arg1");
       expect(response).toEqual({ data: "test" });

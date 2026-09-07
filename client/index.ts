@@ -339,7 +339,6 @@ export class SocketClient {
               }
             }
           };
-          let isCacheUsed = false;
           let cacheKey;
           if (cache && !disableCache) {
             cacheKey = `${namespaceName}/${eventName} ${JSON.stringify(args)}`;
@@ -354,10 +353,7 @@ export class SocketClient {
                       : cache.ttl,
               },
             });
-            isCacheUsed =
-              cacheData !== undefined &&
-              !(typeof cacheData === "object" && cacheData.state === "empty");
-            if (isCacheUsed) {
+            if (cacheData?.state === "cached") {
               debugCall(true, true);
               if (this.cacheHydrator.state.value) {
                 switch (this.cacheHydrator.state.value.mode) {
@@ -377,7 +373,7 @@ export class SocketClient {
                     break;
                 }
               }
-              return cacheData as any;
+              return cacheData.data.data as any;
             }
           }
 
@@ -404,11 +400,16 @@ export class SocketClient {
           }
           await debugCall(true);
           if (cache && cacheKey) {
-            cache.storage.set(cacheKey, data, {
-              timeout:
+            cache.storage.set(cacheKey, {
+              state: "cached",
+              createdAt: Date.now(),
+              ttl:
                 typeof cache.ttl === "function"
                   ? cache.ttl(eventName, args)
                   : cache.ttl,
+              // `headers` is dereferenced unconditionally when reading a
+              // "cached" entry, so it has to be present.
+              data: { data, headers: {}, status: 200, statusText: "OK" },
             });
           }
           if (
