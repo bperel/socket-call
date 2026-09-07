@@ -1,8 +1,8 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { Server } from "socket.io";
-import { z } from "zod";
+import * as v from "valibot";
 import { INTERNAL_ERROR, VALIDATION_ERROR, useSocketEvents } from "../index";
-import { ev } from "../zod";
+import { ev } from "../valibot";
 
 /**
  * Minimal `io` stand-in: `server(io)` wires the namespace and immediately
@@ -108,12 +108,12 @@ describe("dispatcher", () => {
   });
 });
 
-describe("ev (zod-validated events)", () => {
+describe("ev (validated events)", () => {
   it("passes validated arguments through to the handler", async () => {
     const { listeners } = connect(() => ({
       login: ev(
-        z.string().min(3),
-        z.number().int(),
+        v.pipe(v.string(), v.minLength(3)),
+        v.pipe(v.number(), v.integer()),
       )(async (username, age) => `${username}:${age}`),
     }));
 
@@ -126,8 +126,8 @@ describe("ev (zod-validated events)", () => {
   it("acks VALIDATION_ERROR with every issue and its argument index", async () => {
     const { listeners } = connect(() => ({
       login: ev(
-        z.string().min(3),
-        z.number().int(),
+        v.pipe(v.string(), v.minLength(3)),
+        v.pipe(v.number(), v.integer()),
       )(async (username, age) => `${username}:${age}`),
     }));
 
@@ -143,7 +143,7 @@ describe("ev (zod-validated events)", () => {
   it("never runs the handler on invalid input", async () => {
     const handler = mock(async (_username: string) => "ran");
     const { listeners } = connect(() => ({
-      login: ev(z.string().min(3))(handler),
+      login: ev(v.pipe(v.string(), v.minLength(3)))(handler),
     }));
 
     await call(listeners, "login", "b");
@@ -153,7 +153,9 @@ describe("ev (zod-validated events)", () => {
 
   it("applies coercions before the handler sees the argument", async () => {
     const { listeners } = connect(() => ({
-      login: ev(z.coerce.number().int())(async (age) => typeof age),
+      login: ev(v.pipe(v.unknown(), v.transform(Number), v.integer()))(
+        async (age) => typeof age,
+      ),
     }));
 
     expect((await call(listeners, "login", "38")).acked).toBe("number");
@@ -165,9 +167,97 @@ describe("ev (zod-validated events)", () => {
     expect((await call(listeners, "ping")).acked).toBe("pong");
   });
 
+  it("acks a declared message as a plain error payload", async () => {
+    const { listeners } = connect(() => ({
+      login: ev(v.pipe(v.string(), v.minLength(3, "Username is too short")))(
+        async (username) => username,
+      ),
+    }));
+
+    expect(await call(listeners, "login", "b")).toEqual({
+      acked: { error: "Username is too short" },
+      ackCount: 1,
+    });
+  });
+
+  it("picks the message of the action that rejected", async () => {
+    const { listeners } = connect(() => ({
+      login: ev(
+        v.pipe(
+          v.string(),
+          v.minLength(3, "Username is too short"),
+          v.maxLength(6, "Username is too long"),
+        ),
+      )(async (username) => username),
+    }));
+
+    expect((await call(listeners, "login", "b")).acked).toEqual({
+      error: "Username is too short",
+    });
+    expect((await call(listeners, "login", "bruuuuuno")).acked).toEqual({
+      error: "Username is too long",
+    });
+  });
+
+  it("unions messages declared across several arguments", async () => {
+    const { listeners } = connect(() => ({
+      login: ev(
+        v.pipe(v.string(), v.minLength(3, "Username is too short")),
+        v.pipe(v.number(), v.integer("Age must be whole")),
+      )(async (username, age) => `${username}:${age}`),
+    }));
+
+    expect((await call(listeners, "login", "bruno", 1.5)).acked).toEqual({
+      error: "Age must be whole",
+    });
+    expect((await call(listeners, "login", "b", 38)).acked).toEqual({
+      error: "Username is too short",
+    });
+  });
+
+  it("never runs the handler behind a declared message", async () => {
+    const handler = mock(async (_username: string) => "ran");
+    const { listeners } = connect(() => ({
+      login: ev(v.pipe(v.string(), v.minLength(3, "Username is too short")))(
+        handler,
+      ),
+    }));
+
+    await call(listeners, "login", "b");
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not report a declared rejection as a handler failure", async () => {
+    const { listeners, onEventError } = connect(() => ({
+      login: ev(v.pipe(v.string(), v.minLength(3, "Username is too short")))(
+        async (username) => username,
+      ),
+    }));
+
+    await call(listeners, "login", "b");
+
+    expect(onEventError).not.toHaveBeenCalled();
+  });
+
+  it("still acks VALIDATION_ERROR for a rejection with no message", async () => {
+    const { listeners } = connect(() => ({
+      // the type mismatch is reported by the schema, which declared no message
+      login: ev(v.pipe(v.string(), v.minLength(3, "Username is too short")))(
+        async (username) => username,
+      ),
+    }));
+
+    const { acked } = (await call(listeners, "login", 42)) as {
+      acked: { error: string };
+    };
+
+    expect(acked.error).toBe(VALIDATION_ERROR);
+  });
+
   it("reports a nested path inside an object argument", async () => {
     const { listeners } = connect(() => ({
-      register: ev(z.object({ email: z.string().email() }))(
+      register: ev(v.object({ email: v.pipe(v.string(), v.email()) }))(
         async ({ email }) => email,
       ),
     }));

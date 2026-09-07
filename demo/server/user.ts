@@ -1,11 +1,11 @@
 import type { Socket } from "socket.io";
-import { z } from "zod";
+import * as v from "valibot";
 import {
   type NamespaceProxyTarget,
   type ServerSentStartEndEvents,
   useSocketEvents,
 } from "socket-call-server";
-import { ev } from "socket-call-server/zod";
+import { ev } from "socket-call-server/valibot";
 import namespaces from "./namespaces";
 
 type SessionData = {
@@ -23,14 +23,40 @@ type UserServerSentEvents =
     showReminder: (message: string) => void;
   };
 
+const TOO_SHORT = "Username must be at least 3 characters long";
+const TOO_LONG = "Username must be at most 20 characters long";
+const NO_PASSWORD = "Password must not be empty";
+
 const listenEvents = (services: UserServices) => {
   console.log("User namespace connected");
   return {
-    login: ev(z.string().min(3))(async (username) => {
+    // These two events are equivalent: same signature, same typed errors.
+    login: ev(
+      v.pipe(v.string(), v.minLength(3, TOO_SHORT), v.maxLength(20, TOO_LONG)),
+      v.pipe(v.string(), v.nonEmpty(NO_PASSWORD)),
+    )(async (username, password) => {
       services._socket.data.user = { username };
-      console.log(`User ${username} logged in`);
+      console.log(
+        `User ${username} logged in with a ${password.length}-character password`,
+      );
       return `You are now logged in ${username}!`;
     }),
+    otherLogin: async (username: string, password: string) => {
+      if (username.length < 3) {
+        return { error: TOO_SHORT } as const;
+      }
+      if (username.length > 20) {
+        return { error: TOO_LONG } as const;
+      }
+      if (password.length === 0) {
+        return { error: NO_PASSWORD } as const;
+      }
+      services._socket.data.user = { username };
+      console.log(
+        `User ${username} logged in with a ${password.length}-character password`,
+      );
+      return `You are now logged in ${username}!`;
+    },
     sendReminderIn5Seconds: async () => {
       setTimeout(() => {
         services.showReminder(

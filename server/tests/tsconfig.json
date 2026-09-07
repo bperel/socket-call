@@ -7,5 +7,5 @@
     "rootDir": "..",
     "types": ["bun"]
   },
-  "include": ["../index.ts", "../zod.ts", "./**/*.ts"]
+  "include": ["../index.ts", "../valibot.ts", "./**/*.ts"]
 }

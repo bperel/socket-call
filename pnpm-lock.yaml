@@ -58,9 +58,9 @@ importers:
       socket.io:
         specifier: ^4.8.3
         version: 4.8.3
-      zod:
-        specifier: ^4.5.4
-        version: 4.5.4
+      valibot:
+        specifier: ^1.1.0
+        version: 1.4.2(typescript@7.0.2)
 
   server:
     dependencies:
@@ -74,9 +74,9 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
-      zod:
-        specifier: ^4.5.4
-        version: 4.5.4
+      valibot:
+        specifier: ^1.1.0
+        version: 1.4.2(typescript@7.0.2)
 
 packages:
 
@@ -924,6 +924,14 @@ packages:
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
+  valibot@1.4.2:
+    resolution: {integrity: sha512-gjdCvJ6d3RyHAneqxMYMW9QMCwYMb3jpOO0IyHZV1bnRHFBHrX3VkIILt5XYR0WhwHiH7Mty8ovuPZ/O3gamrg==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   vary@1.1.2:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
@@ -1010,9 +1018,6 @@ packages:
   yargs@18.0.0:
     resolution: {integrity: sha512-4UEqdc2RYGHZc7Doyqkrqiln3p9X2DZVxaGbwhn2pi7MrRagKaOcIKe8L3OxYcbhXLgLFUS3zAYuQjKBQgmuNg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
-
-  zod@4.5.4:
-    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
 
 snapshots:
 
@@ -1734,6 +1739,10 @@ snapshots:
 
   undici-types@8.3.0: {}
 
+  valibot@1.4.2(typescript@7.0.2):
+    optionalDependencies:
+      typescript: 7.0.2
+
   vary@1.1.2: {}
 
   vite@8.2.2(@types/node@26.4.1)(tsx@4.19.4):
@@ -1780,5 +1789,3 @@ snapshots:
       string-width: 7.2.0
       y18n: 5.0.8
       yargs-parser: 22.0.0
-
-  zod@4.5.4: {}

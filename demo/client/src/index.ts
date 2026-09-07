@@ -1,4 +1,8 @@
-import { EventOutput, SocketClient } from "socket-call-client";
+import {
+  EventError,
+  SocketClient,
+  SuccessfulEventOutput,
+} from "socket-call-client";
 import namespaces from "../../server/namespaces.ts";
 import {
   type ClientListenEvents as UserListenEvents,
@@ -17,14 +21,21 @@ const log = (message: string) => {
 document.getElementById("login-form")!.addEventListener("submit", (e) => {
   e.preventDefault();
   const username = document.getElementById("username") as HTMLInputElement;
-  user.login(username.value).then((message) => {
-    //^login: (username: string) => Promise<string>
-
-    // We can use the EventOutput type to get the return type of the event
-    type Message = EventOutput<UserEmitEvents, "login">;
-    const myMessage: Message = message;
-    log(myMessage);
-  });
+  const password = document.getElementById("password") as HTMLInputElement;
+  user
+    .login(username.value, password.value)
+    .then((message /* typed as string */) => {
+      // We can use the SuccessfulEventOutput type to get its resolved type
+      type Message = SuccessfulEventOutput<UserEmitEvents, "login">;
+      const myMessage: Message = message;
+      log(myMessage);
+    })
+    .catch((error) => {
+      // And the EventError type to get the errors it can reject with
+      type LoginError = EventError<UserEmitEvents, "login">["error"];
+      const reason: LoginError = error.error;
+      log(`Error: ${reason}`);
+    });
 });
 
 document.getElementById("send-reminder")!.addEventListener("click", () => {

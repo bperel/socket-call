@@ -66,15 +66,15 @@ export type ClientListenEvents = (typeof client)["listenEventsInterfaces"];
 
 Event arguments arrive from the network, so their declared types are a promise
 rather than a guarantee. Wrap a handler in `ev` to check them at runtime with
-[Zod](https://zod.dev):
+[Valibot](https://valibot.dev):
 
 ```typescript
-import { z } from "zod";
-import { ev } from "socket-call-server/zod";
+import * as v from "valibot";
+import { ev } from "socket-call-server/valibot";
 
 const listenEvents = (services: UserServices) => ({
   // `username` needs no annotation: its type is inferred from the schema
-  login: ev(z.string().min(3))(async (username) => {
+  login: ev(v.pipe(v.string(), v.minLength(3)))(async (username) => {
     services._socket.data.user = { username };
     return `You are now logged in ${username}!`;
   }),
@@ -90,8 +90,7 @@ the handler's parameters are inferred from them, so nothing is written twice and
 a handler whose parameters contradict its schemas is a compile error.
 
 Only the input is validated — the return type is inferred from the handler body,
-which keeps the client-facing types intact without an `output` schema. Use
-`z.function({ input, output })` directly if you want the response checked too.
+which keeps the client-facing types intact without an output schema.
 
 When validation fails the handler is never called and the client's promise
 rejects with a `SocketCallError` carrying `error: "VALIDATION_ERROR"` and an
@@ -100,8 +99,26 @@ a handler rejects with `error: "INTERNAL_ERROR"`, with the original error logged
 server-side and kept out of the payload. Pass `onEventError` to
 `useSocketEvents` to report these somewhere other than the console.
 
-`zod` is an optional peer dependency: it is only needed if you import
-`socket-call-server/zod`.
+Give a validation action a message and the event returns it rather than
+throwing, with the message in its return type:
+
+```typescript
+const TOO_SHORT = "Username must be at least 3 characters long";
+const TOO_LONG = "Username must be at most 20 characters long";
+
+login: ev(
+  v.pipe(v.string(), v.minLength(3, TOO_SHORT), v.maxLength(20, TOO_LONG)),
+)(async (username) => `You are now logged in ${username}!`);
+// (username: string) =>
+//   Promise<string | { error: typeof TOO_SHORT | typeof TOO_LONG }>
+```
+
+The client then rejects with a `SocketCallError` whose `error` is narrowed to
+those literals. Messages form a flat union across arguments; a rejection with no
+declared message still acks `VALIDATION_ERROR`.
+
+`valibot` is an optional peer dependency: it is only needed if you import
+`socket-call-server/valibot`.
 
 - Client side:
 

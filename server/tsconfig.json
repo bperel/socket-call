@@ -15,6 +15,6 @@
     "allowJs": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["index.ts", "zod.ts"],
+  "include": ["index.ts", "valibot.ts"],
   "exclude": ["node_modules"]
 }

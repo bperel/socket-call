@@ -63,10 +63,21 @@ export type EventError<
   EventName extends keyof ClientEvents,
 > = OnlyError<EventOutput<ClientEvents, EventName>>;
 
+/**
+ * A promise whose rejection is typed. `then`, `catch` and `finally` all hand
+ * back an `EventPromise` so that the rejection type survives chaining — a plain
+ * `Promise` would widen the reason of any `catch` placed after a `then` to
+ * `any`.
+ */
 export interface EventPromise<T, E> extends Promise<T> {
+  then<TResult1 = T, TResult2 = never>(
+    onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: E) => TResult2 | PromiseLike<TResult2>) | null,
+  ): EventPromise<TResult1 | TResult2, E>;
   catch<R = never>(
     onrejected?: ((reason: E) => R | PromiseLike<R>) | null,
-  ): Promise<T | R>;
+  ): EventPromise<T | R, E>;
+  finally(onfinally?: (() => void) | null): EventPromise<T, E>;
 }
 
 type CacheDuration<Events extends EventsMap> =
