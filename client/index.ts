@@ -76,7 +76,6 @@ type SocketCacheOptions<Events extends EventsMap> = Pick<
   ttl: number | ((event: StringKeyOf<Events>, args: unknown[]) => number);
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type EventsMap = Record<string, (...args: any[]) => Promise<any>>;
 
 type StringKeyOf<T> = keyof T & string;
