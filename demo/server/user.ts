@@ -59,13 +59,16 @@ const listenEvents = (services: UserServices) => {
       );
       return `You are now logged in ${username}!`;
     },
-    sendReminderIn5Seconds: async () => {
+    // A trailing optional schema drops the argument from the call, so the
+    // client calls this with a message or with nothing at all.
+    sendReminderIn5Seconds: ev(v.optional(v.string()))(async (message) => {
       setTimeout(() => {
         services.showReminder(
-          `Hey ${services._socket.data.user!.username}, you asked me to remind you!`,
+          message ??
+            `Hey ${services._socket.data.user!.username}, you asked me to remind you!`,
         );
       }, 5000);
-    },
+    }),
     runProcess: async () => {
       const processId = ~~(Math.random() * 1000);
       services.showProgress(processId);

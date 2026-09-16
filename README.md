@@ -89,6 +89,24 @@ One schema per positional argument. The schemas are the single source of truth:
 the handler's parameters are inferred from them, so nothing is written twice and
 a handler whose parameters contradict its schemas is a compile error.
 
+A trailing schema that accepts `undefined` — `v.optional(...)`, `v.nullish(...)`
+— makes the argument omissible rather than merely nullable, so callers can leave
+it out instead of passing an explicit `undefined`:
+
+```typescript
+createEntry: ev(
+  v.number(),
+  v.optional(v.number()),
+)(async (position, parentId) => createEntry(position, parentId));
+// (position: number, parentId?: number) => Promise<…>
+// client: createEntry(3) and createEntry(3, 7) both typecheck
+```
+
+Only trailing arguments are omissible: an optional schema followed by a required
+one is still a slot the caller has to fill. A default (`v.optional(v.number(),
+0)`) leaves the argument optional for the caller while the handler receives a
+number, with no narrowing check to write.
+
 Only the input is validated — the return type is inferred from the handler body,
 which keeps the client-facing types intact without an output schema.
 

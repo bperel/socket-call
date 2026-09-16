@@ -161,6 +161,64 @@ describe("ev (validated events)", () => {
     expect((await call(listeners, "login", "38")).acked).toBe("number");
   });
 
+  it("runs the handler when a trailing optional argument is not emitted", async () => {
+    const { listeners } = connect(() => ({
+      createEntry: ev(
+        v.number(),
+        v.optional(v.number()),
+      )(async (position, parentId) => `${position}:${parentId}`),
+    }));
+
+    expect((await call(listeners, "createEntry", 3)).acked).toBe("3:undefined");
+  });
+
+  it("falls back to the default of a trailing argument that is not emitted", async () => {
+    const { listeners } = connect(() => ({
+      createEntry: ev(
+        v.number(),
+        v.optional(v.number(), 0),
+      )(async (position, parentId) => `${position}:${parentId}`),
+    }));
+
+    expect((await call(listeners, "createEntry", 3)).acked).toBe("3:0");
+  });
+
+  it("accepts every arity when several trailing arguments are optional", async () => {
+    const { listeners } = connect(() => ({
+      createEntry: ev(
+        v.number(),
+        v.optional(v.number()),
+        v.optional(v.string(), "x"),
+      )(async (...args) => JSON.stringify(args)),
+    }));
+
+    expect((await call(listeners, "createEntry", 3)).acked).toBe(
+      '[3,null,"x"]',
+    );
+    expect((await call(listeners, "createEntry", 3, 4)).acked).toBe(
+      '[3,4,"x"]',
+    );
+    expect((await call(listeners, "createEntry", 3, 4, "c")).acked).toBe(
+      '[3,4,"c"]',
+    );
+  });
+
+  it("still validates a trailing optional argument that is emitted", async () => {
+    const { listeners } = connect(() => ({
+      createEntry: ev(
+        v.number(),
+        v.optional(v.number()),
+      )(async (position, parentId) => `${position}:${parentId}`),
+    }));
+
+    const { acked } = (await call(listeners, "createEntry", 3, "nope")) as {
+      acked: { error: string; errorDetails: string };
+    };
+
+    expect(acked.error).toBe(VALIDATION_ERROR);
+    expect(acked.errorDetails).toContain("1:");
+  });
+
   it("supports no-argument events", async () => {
     const { listeners } = connect(() => ({ ping: ev()(async () => "pong") }));
 

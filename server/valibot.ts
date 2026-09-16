@@ -28,6 +28,41 @@ type RejectionOf<Input extends readonly v.GenericSchema[]> = [
       errorDetails?: string;
     };
 
+/**
+ * A schema as the caller sends it, and as the handler receives it: a default
+ * makes an argument optional to the one and certain to the other.
+ */
+type Inferred<Schema extends v.GenericSchema> = {
+  in: v.InferInput<Schema>;
+  out: v.InferOutput<Schema>;
+};
+
+type MappedParams<
+  Input extends readonly v.GenericSchema[],
+  Direction extends keyof Inferred<v.GenericSchema>,
+> = {
+  -readonly [Key in keyof Input]: Inferred<Input[Key]>[Direction];
+};
+
+/**
+ * The parameters the schemas describe. Trailing schemas that accept `undefined`
+ * become optional parameters, which mapping alone cannot express: it leaves
+ * them required elements typed `T | undefined`, for callers to spell out.
+ */
+type Params<
+  Input extends readonly v.GenericSchema[],
+  Direction extends keyof Inferred<v.GenericSchema>,
+> = Input extends readonly []
+  ? []
+  : Input extends readonly [
+        ...infer Head extends readonly v.GenericSchema[],
+        infer Last extends v.GenericSchema,
+      ]
+    ? undefined extends Inferred<Last>[Direction]
+      ? [...Params<Head, Direction>, Inferred<Last>[Direction]?]
+      : MappedParams<Input, Direction>
+    : MappedParams<Input, Direction>;
+
 /** The same messages {@link MessagesOf} reads, off the same pipe at runtime. */
 const messagesOf = (schema: v.GenericSchema) =>
   "pipe" in schema
@@ -63,6 +98,9 @@ const messagesOf = (schema: v.GenericSchema) =>
  * Only the input is validated — the return type is inferred from the handler
  * body, which keeps the client-facing types intact without an output schema.
  *
+ * A trailing schema that accepts `undefined` makes the argument omissible:
+ * `ev(v.number(), v.optional(v.number()))` is called as `(3)` or as `(3, 7)`.
+ *
  * A rejection is always returned, never thrown: with the declared message when
  * the action that rejected carried one, and with `VALIDATION_ERROR` plus
  * `errorDetails` otherwise — a type mismatch, an action given no message, or a
@@ -76,10 +114,10 @@ export const ev = <const Input extends readonly v.GenericSchema[]>(
   const declared = new Set(input.flatMap(messagesOf));
 
   return <Return>(
-      handler: (...params: v.InferOutput<typeof args>) => Promise<Return>,
+      handler: (...params: Params<Input, "out">) => Promise<Return>,
     ) =>
     async (
-      ...received: v.InferInput<typeof args>
+      ...received: Params<Input, "in">
     ): Promise<Return | RejectionOf<Input>> => {
       const parsed = v.safeParse(args, received);
       if (parsed.success) {
