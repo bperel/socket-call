@@ -18,7 +18,7 @@
     "test:types": "tsc --noEmit -p tests/tsconfig.json"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.1",
+    "@types/bun": "^1.4.2",
     "typescript": "^7.0.2"
   },
   "dependencies": {
