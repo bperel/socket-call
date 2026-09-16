@@ -109,13 +109,17 @@ const TOO_LONG = "Username must be at most 20 characters long";
 login: ev(
   v.pipe(v.string(), v.minLength(3, TOO_SHORT), v.maxLength(20, TOO_LONG)),
 )(async (username) => `You are now logged in ${username}!`);
-// (username: string) =>
-//   Promise<string | { error: typeof TOO_SHORT | typeof TOO_LONG }>
+// (username: string) => Promise<
+//   | string
+//   | { error: typeof TOO_SHORT | typeof TOO_LONG | "VALIDATION_ERROR";
+//       errorDetails?: string }
+// >
 ```
 
-The client then rejects with a `SocketCallError` whose `error` is narrowed to
-those literals. Messages form a flat union across arguments; a rejection with no
-declared message still acks `VALIDATION_ERROR`.
+A rejection with no declared message answers `VALIDATION_ERROR` with the same
+`errorDetails`, so the union above is the complete set of errors an event can
+answer with, and the client's `SocketCallError` narrows `error` to it. Messages
+form a flat union across arguments.
 
 `valibot` is an optional peer dependency: it is only needed if you import
 `socket-call-server/valibot`.

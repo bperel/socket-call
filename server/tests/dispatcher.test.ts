@@ -240,6 +240,30 @@ describe("ev (validated events)", () => {
     expect(onEventError).not.toHaveBeenCalled();
   });
 
+  it("does not report an undeclared rejection as a handler failure", async () => {
+    const { listeners, onEventError } = connect(() => ({
+      login: ev(v.pipe(v.string(), v.minLength(3)))(async (u) => u),
+    }));
+
+    await call(listeners, "login", "b");
+
+    expect(onEventError).not.toHaveBeenCalled();
+  });
+
+  it("keeps errorDetails when falling back to VALIDATION_ERROR", async () => {
+    const { listeners } = connect(() => ({
+      login: ev(
+        v.pipe(v.string(), v.minLength(3, "Username is too short")),
+        v.pipe(v.number(), v.integer()),
+      )(async (u, n) => `${u}${n}`),
+    }));
+
+    expect((await call(listeners, "login", "bruno", 1.5)).acked).toEqual({
+      error: VALIDATION_ERROR,
+      errorDetails: "1: Invalid integer: Received 1.5",
+    });
+  });
+
   it("still acks VALIDATION_ERROR for a rejection with no message", async () => {
     const { listeners } = connect(() => ({
       // the type mismatch is reported by the schema, which declared no message

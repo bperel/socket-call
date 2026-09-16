@@ -30,7 +30,9 @@ const NO_PASSWORD = "Password must not be empty";
 const listenEvents = (services: UserServices) => {
   console.log("User namespace connected");
   return {
-    // These two events are equivalent: same signature, same typed errors.
+    // Both events answer with the same typed messages. Only `login` can also
+    // answer VALIDATION_ERROR: a hand-written guard takes the declared
+    // parameter types on trust, while the schema checks them at runtime.
     login: ev(
       v.pipe(v.string(), v.minLength(3, TOO_SHORT), v.maxLength(20, TOO_LONG)),
       v.pipe(v.string(), v.nonEmpty(NO_PASSWORD)),

@@ -1,6 +1,10 @@
 import type { Socket } from "socket.io";
 import * as v from "valibot";
-import { type NamespaceProxyTarget, useSocketEvents } from "../index";
+import {
+  type NamespaceProxyTarget,
+  useSocketEvents,
+  VALIDATION_ERROR,
+} from "../index";
 import { ev } from "../valibot";
 
 type UserServerSentEvents = { showReminder: (message: string) => void };
@@ -77,7 +81,11 @@ const validated = ev(
   v.pipe(v.string(), v.minLength(3, TOO_SHORT), v.maxLength(20, TOO_LONG)),
 )(async (username) => `Welcome ${username}`);
 
-/** The same event written by hand, which `validated` has to match. */
+/**
+ * The same event written by hand. It matches `validated` except for
+ * `VALIDATION_ERROR`, which only the schema can report: a hand-written guard
+ * takes its parameter's type on trust.
+ */
 const byHand = async (username: string) => {
   if (username.length < 3) {
     return { error: "Username must be at least 3 characters long" as const };
@@ -88,25 +96,38 @@ const byHand = async (username: string) => {
   return `Welcome ${username}`;
 };
 
-// mutual assignability: the two spellings are the same type
+// the hand-written errors are all accounted for by the validated event
 const fromHand: typeof validated = byHand;
-const fromEv: typeof byHand = validated;
-void [fromHand, fromEv];
+void fromHand;
 
 type ValidatedReturn = Awaited<ReturnType<typeof validated>>;
 const short: ValidatedReturn = { error: TOO_SHORT };
 const long: ValidatedReturn = { error: TOO_LONG };
-// @ts-expect-error only declared messages are part of the union
+// a rejection no message covers is reported as VALIDATION_ERROR
+const fallback: ValidatedReturn = {
+  error: VALIDATION_ERROR,
+  errorDetails: "0: Invalid type: Expected string but received 42",
+};
+// @ts-expect-error only declared messages, plus VALIDATION_ERROR, are in the union
 const undeclared: ValidatedReturn = { error: "something else" };
-void [short, long, undeclared];
+void [short, long, fallback, undeclared];
 
-// 7. an action given no message contributes nothing to the return type
+// 7. an action given no message leaves VALIDATION_ERROR as the only rejection
 const unnamed = ev(v.pipe(v.string(), v.minLength(3)))(async (u) => u);
 type UnnamedReturn = Awaited<ReturnType<typeof unnamed>>;
 const justTheValue: UnnamedReturn = "bruno";
-// @ts-expect-error nothing declared a message, so there is no error member
+const onlyFallback: UnnamedReturn = { error: VALIDATION_ERROR };
+// @ts-expect-error no message was declared, so no literal joins the union
 const noSuchError: UnnamedReturn = { error: TOO_SHORT };
-void [justTheValue, noSuchError];
+void [justTheValue, onlyFallback, noSuchError];
+
+// 7b. with no schemas at all there is nothing to reject, so no error member
+const noSchemas = ev()(async () => "pong");
+type NoSchemasReturn = Awaited<ReturnType<typeof noSchemas>>;
+const pongOnly: NoSchemasReturn = "pong";
+// @ts-expect-error a no-argument event cannot fail validation
+const impossible: NoSchemasReturn = { error: VALIDATION_ERROR };
+void [pongOnly, impossible];
 
 // 8. messages from several arguments are unioned, parameters still inferred
 const twoArgs = ev(
@@ -129,6 +150,7 @@ const nested = ev(v.object({ email: v.pipe(v.string(), v.email("BAD")) }))(
 );
 type NestedReturn = Awaited<ReturnType<typeof nested>>;
 const plainString: NestedReturn = "a@b.c";
+const nestedFallback: NestedReturn = { error: VALIDATION_ERROR };
 // @ts-expect-error only messages on an argument's own pipe are declared
 const nestedError: NestedReturn = { error: "BAD" };
-void [plainString, nestedError];
+void [plainString, nestedFallback, nestedError];

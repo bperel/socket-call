@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { VALIDATION_ERROR, formatIssues } from "./index.js";
 
 /**
  * The messages a schema declares, as a union of literals.
@@ -13,12 +14,19 @@ type MessagesOf<Schema> = Schema extends { pipe: readonly (infer Action)[] }
     : never
   : never;
 
-/** Absent unless a schema declared one, so plain events keep their type. */
+/**
+ * What a rejected call answers with: a declared message when the action that
+ * rejected carried one, `VALIDATION_ERROR` otherwise. Absent when there are no
+ * schemas at all, so a no-argument event keeps its plain type.
+ */
 type RejectionOf<Input extends readonly v.GenericSchema[]> = [
-  MessagesOf<Input[number]>,
+  Input[number],
 ] extends [never]
   ? never
-  : { error: MessagesOf<Input[number]> };
+  : {
+      error: MessagesOf<Input[number]> | typeof VALIDATION_ERROR;
+      errorDetails?: string;
+    };
 
 /** The same messages {@link MessagesOf} reads, off the same pipe at runtime. */
 const messagesOf = (schema: v.GenericSchema) =>
@@ -55,10 +63,11 @@ const messagesOf = (schema: v.GenericSchema) =>
  * Only the input is validated — the return type is inferred from the handler
  * body, which keeps the client-facing types intact without an output schema.
  *
- * A rejection carrying a declared message is returned. Anything else — a type
- * mismatch, an action given no message, a message nested inside an object
- * schema — still throws, which the dispatcher turns into a `VALIDATION_ERROR`
- * ack; the client then rejects with a `SocketCallError`.
+ * A rejection is always returned, never thrown: with the declared message when
+ * the action that rejected carried one, and with `VALIDATION_ERROR` plus
+ * `errorDetails` otherwise — a type mismatch, an action given no message, or a
+ * message nested inside an object schema. Either way the client rejects with a
+ * `SocketCallError`, whose `error` the return type has already narrowed.
  */
 export const ev = <const Input extends readonly v.GenericSchema[]>(
   ...input: Input
@@ -83,7 +92,13 @@ export const ev = <const Input extends readonly v.GenericSchema[]>(
       const declaredMessage = parsed.issues
         .map(({ message }) => message)
         .find((message) => declared.has(message));
-      if (declaredMessage === undefined) throw new v.ValiError(parsed.issues);
-      return { error: declaredMessage } as RejectionOf<Input>;
+      return (
+        declaredMessage === undefined
+          ? {
+              error: VALIDATION_ERROR,
+              errorDetails: formatIssues(parsed.issues),
+            }
+          : { error: declaredMessage }
+      ) as RejectionOf<Input>;
     };
 };

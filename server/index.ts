@@ -110,7 +110,8 @@ const formatPathSegment = (segment: unknown) =>
     ? String((segment as { key: unknown }).key)
     : String(segment);
 
-const formatIssues = (issues: Issue[]) =>
+/** Shared with the `valibot` entry point, which reports issues it does not throw. */
+export const formatIssues = (issues: Issue[]) =>
   issues
     .map(({ path, message }) =>
       path?.length
