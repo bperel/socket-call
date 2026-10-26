@@ -66,6 +66,17 @@ const _ok: Ok = { jwt: "x" };
 const _err: Err = { error: "Invalid token" };
 void [_ok, _err];
 
+// 7b. the rejection type survives a .then() placed before .catch()
+auth
+  .changePassword({ token: "t", password: "p" })
+  .then((r) => r.jwt)
+  .catch((e) => {
+    // @ts-expect-error "Nope" is not part of the error union
+    if (e.error === "Nope") return "";
+    const known: "Invalid token" | "Password too short" = e.error;
+    return known;
+  });
+
 // 8. await inside try/catch: binding is `unknown` (documented TS limitation)
 async function viaTryCatch() {
   try {

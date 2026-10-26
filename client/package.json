@@ -19,18 +19,10 @@
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "unstorage": "^1.17.6"
   },
   "dependencies": {
     "socket.io-client": "^4.8.3"
-  },
-  "peerDependencies": {
-    "axios-cache-interceptor": "^1.12.0",
-    "vue": "^3.5.39"
-  },
-  "peerDependenciesMeta": {
-    "axios-cache-interceptor": {
-      "optional": true
-    }
   }
 }

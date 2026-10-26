@@ -1,15 +1,12 @@
+import { createStorage } from "unstorage";
 import {
-  buildMemoryStorage,
-  type CachedStorageValue,
-  type NotEmptyStorageValue,
-} from "axios-cache-interceptor";
-import {
-  AxiosStorage,
   SocketCallError,
   SocketClient,
   stringifyEventParameters,
   type Errorable,
   type ScopedError,
+  type SocketCacheEntry,
+  type SocketCacheStorage,
 } from "../index";
 import { expect, describe, mock, beforeEach, it, jest } from "bun:test";
 
@@ -36,19 +33,25 @@ const mockSocket = {
 const removeTimestamps = ([log]: unknown[]) =>
   String(log).replace(/ (?:in [^ ]+ )?at [^Z]+Z/, "");
 
-const buildAxiosStorage = (
-  cachedValue: Record<string, NotEmptyStorageValue>,
-): AxiosStorage => ({
-  set: (key, data) => {
+const buildStubStorage = (
+  cachedValue: Record<string, SocketCacheEntry>,
+): SocketCacheStorage => ({
+  setItem: (key, data) => {
     console.log("setting cache", key, data);
     cachedValue[key] = data;
   },
-  get: async (key) => {
+  getItem: async (key) => {
     console.log("getting cache", key);
     return cachedValue[key];
   },
-  remove: jest.fn(),
-  clear: jest.fn(),
+  removeItem: jest.fn(),
+});
+
+/** An entry that stays fresh for the whole test. */
+const freshEntry = (data: unknown): SocketCacheEntry => ({
+  data,
+  createdAt: Date.now(),
+  ttl: 60_000,
 });
 
 describe("SocketClient", () => {
@@ -75,6 +78,38 @@ describe("SocketClient", () => {
       expect(loadCache).toHaveBeenCalled();
       expect(loadReal).toHaveBeenCalled();
       expect(socketClient.cacheHydrator.state.value?.mode).toBe("HYDRATE");
+    });
+
+    it("should notify subscribers of every state change", async () => {
+      const modes: (string | undefined)[] = [];
+      const unsubscribe = socketClient.cacheHydrator.state.subscribe((state) =>
+        modes.push(state?.mode),
+      );
+
+      await socketClient.cacheHydrator.run(
+        async () => {},
+        () => {},
+      );
+      unsubscribe();
+      await socketClient.cacheHydrator.run(
+        async () => {},
+        () => {},
+      );
+
+      expect(modes).toEqual([undefined, "LOAD_CACHE", "HYDRATE"]);
+    });
+  });
+
+  describe("_ongoingCalls", () => {
+    it("should list a call while it is pending", async () => {
+      const namespace =
+        socketClient.addNamespace<ClientEvents>("test-namespace");
+      const snapshots: string[][] = [];
+      namespace._ongoingCalls.subscribe((calls) => snapshots.push(calls));
+
+      await namespace.testEvent("arg1");
+
+      expect(snapshots).toEqual([[], ['testEvent("arg1")'], []]);
     });
   });
 
@@ -124,20 +159,10 @@ describe("SocketClient", () => {
     });
 
     it("should store and restore cached responses", async () => {
-      let cachedValue: Record<string, NotEmptyStorageValue> = {
-        'test-namespace/testEvent ["arg2"]': {
-          data: {
-            data: { data: "cached" },
-            headers: {},
-            status: 200,
-            statusText: "OK",
-          },
-          createdAt: 1,
-          state: "cached",
-          ttl: 1,
-        },
+      let cachedValue: Record<string, SocketCacheEntry> = {
+        'test-namespace/testEvent ["arg2"]': freshEntry({ data: "cached" }),
       };
-      const storage = buildAxiosStorage(cachedValue);
+      const storage = buildStubStorage(cachedValue);
       const namespace = socketClient.addNamespace<ClientEvents>(
         "test-namespace",
         {
@@ -155,13 +180,8 @@ describe("SocketClient", () => {
     });
 
     it("should not use cached responses when disableCache is true", async () => {
-      const cachedValue: Record<string, NotEmptyStorageValue> = {
-        'test-namespace/testEvent ["arg2"]': {
-          data: { data: "cached", headers: {}, status: 200, statusText: "OK" },
-          createdAt: 1,
-          state: "cached",
-          ttl: 1,
-        },
+      const cachedValue: Record<string, SocketCacheEntry> = {
+        'test-namespace/testEvent ["arg2"]': freshEntry("cached"),
       };
 
       const debugSpy = jest.spyOn(console, "debug");
@@ -171,7 +191,7 @@ describe("SocketClient", () => {
         {
           cache: {
             ttl: 1,
-            storage: buildAxiosStorage(cachedValue),
+            storage: buildStubStorage(cachedValue),
           },
         },
       );
@@ -187,20 +207,15 @@ describe("SocketClient", () => {
     });
 
     it("should keep the state of the data loader", async () => {
-      const cachedValue: Record<string, NotEmptyStorageValue> = {
-        'test-namespace/testEvent ["arg2"]': {
-          data: { data: "cached", headers: {}, status: 200, statusText: "OK" },
-          createdAt: 1,
-          state: "cached",
-          ttl: 1,
-        },
+      const cachedValue: Record<string, SocketCacheEntry> = {
+        'test-namespace/testEvent ["arg2"]': freshEntry("cached"),
       };
       const namespace = socketClient.addNamespace<ClientEvents>(
         "test-namespace",
         {
           cache: {
             ttl: 1,
-            storage: buildAxiosStorage(cachedValue),
+            storage: buildStubStorage(cachedValue),
           },
         },
       );
@@ -228,25 +243,21 @@ describe("SocketClient", () => {
   describe("cache expiry", () => {
     const cacheKey = 'test-namespace/testEvent ["arg2"]';
 
-    /** A `cached` entry written `ageMs` ago, as the client itself writes them. */
+    /** An entry written `ageMs` ago, as the client itself writes them. */
     const entry = (
       payload: unknown,
       ageMs: number,
       ttl: number,
       staleTtl?: number,
-    ): CachedStorageValue => ({
-      state: "cached",
+    ): SocketCacheEntry => ({
+      data: payload,
       createdAt: Date.now() - ageMs,
       ttl,
       staleTtl,
-      data: { data: payload, headers: {}, status: 200, statusText: "OK" },
     });
 
-    /**
-     * Unlike `buildAxiosStorage`, a real memory storage runs the expiry rules,
-     * which is the only way `ttl` and `staleTtl` are observable at all.
-     */
-    const withMemoryStorage = ({
+    /** Runs a namespace against an unstorage memory storage and a scripted socket. */
+    const withMemoryStorage = async ({
       ttl,
       staleTtl,
       seed,
@@ -254,7 +265,7 @@ describe("SocketClient", () => {
     }: {
       ttl: number | ((event: string, args: unknown[]) => number);
       staleTtl?: number | ((event: string, args: unknown[]) => number);
-      seed?: CachedStorageValue;
+      seed?: SocketCacheEntry;
       offline?: boolean;
     }) => {
       mock.module("socket.io-client", () => ({
@@ -275,50 +286,44 @@ describe("SocketClient", () => {
         }),
       }));
 
-      const storage = buildMemoryStorage();
+      const storage = createStorage<SocketCacheEntry>();
       const client = new SocketClient("http://test.com/");
       const namespace = client.addNamespace<ClientEvents>("test-namespace", {
         cache: { ttl, staleTtl, storage },
       });
-      if (seed) storage.set(cacheKey, seed);
+      if (seed) await storage.setItem(cacheKey, seed);
       return { client, namespace, storage };
     };
 
     it("should write the configured ttl and staleTtl alongside the entry", async () => {
-      const { namespace, storage } = withMemoryStorage({
+      const { namespace, storage } = await withMemoryStorage({
         ttl: 5000,
         staleTtl: 60000,
       });
 
       await namespace.testEvent("arg1");
 
-      const stored = await storage.get('test-namespace/testEvent ["arg1"]');
-      if (stored.state !== "cached") {
-        throw new Error(`expected a cached entry, got ${stored.state}`);
-      }
-      expect(stored.ttl).toBe(5000);
-      expect(stored.staleTtl).toBe(60000);
-      expect(stored.data.data).toEqual({ data: "test" });
+      const stored = await storage.getItem('test-namespace/testEvent ["arg1"]');
+      expect(stored?.ttl).toBe(5000);
+      expect(stored?.staleTtl).toBe(60000);
+      expect(stored?.data).toEqual({ data: "test" });
     });
 
     it("should resolve ttl and staleTtl given as functions", async () => {
-      const { namespace, storage } = withMemoryStorage({
+      const { namespace, storage } = await withMemoryStorage({
         ttl: (event) => (event === "testEvent" ? 1234 : 0),
         staleTtl: (_event, args) => (args.length === 1 ? 4321 : 0),
       });
 
       await namespace.testEvent("arg1");
 
-      const stored = await storage.get('test-namespace/testEvent ["arg1"]');
-      if (stored.state !== "cached") {
-        throw new Error(`expected a cached entry, got ${stored.state}`);
-      }
-      expect(stored.ttl).toBe(1234);
-      expect(stored.staleTtl).toBe(4321);
+      const stored = await storage.getItem('test-namespace/testEvent ["arg1"]');
+      expect(stored?.ttl).toBe(1234);
+      expect(stored?.staleTtl).toBe(4321);
     });
 
     it("should serve an entry that is still within its ttl", async () => {
-      const { namespace } = withMemoryStorage({
+      const { namespace } = await withMemoryStorage({
         ttl: 5000,
         seed: entry({ data: "cached" }, 10, 5000),
       });
@@ -327,7 +332,7 @@ describe("SocketClient", () => {
     });
 
     it("should refetch once the ttl elapsed and no staleTtl is set", async () => {
-      const { namespace } = withMemoryStorage({
+      const { namespace } = await withMemoryStorage({
         ttl: 100,
         seed: entry({ data: "cached" }, 500, 100),
       });
@@ -335,8 +340,21 @@ describe("SocketClient", () => {
       expect(await namespace.testEvent("arg2")).toEqual({ data: "test" });
     });
 
+    it("should drop an entry once both ttl and staleTtl elapsed", async () => {
+      const { namespace, storage } = await withMemoryStorage({
+        ttl: 100,
+        staleTtl: 100,
+        seed: entry({ data: "cached" }, 500, 100, 100),
+      });
+      const removeSpy = jest.spyOn(storage, "removeItem");
+
+      await namespace.testEvent("arg2");
+
+      expect(removeSpy).toHaveBeenCalledWith(cacheKey);
+    });
+
     it("should refetch an expired entry while online, even within staleTtl", async () => {
-      const { namespace } = withMemoryStorage({
+      const { namespace } = await withMemoryStorage({
         ttl: 100,
         staleTtl: 5000,
         seed: entry({ data: "cached" }, 500, 100, 5000),
@@ -346,7 +364,7 @@ describe("SocketClient", () => {
     });
 
     it("should serve an expired entry within staleTtl while offline", async () => {
-      const { namespace } = withMemoryStorage({
+      const { namespace } = await withMemoryStorage({
         ttl: 100,
         staleTtl: 5000,
         seed: entry({ data: "cached" }, 500, 100, 5000),
@@ -357,7 +375,7 @@ describe("SocketClient", () => {
     });
 
     it("should refetch offline once staleTtl elapsed too", async () => {
-      const { namespace } = withMemoryStorage({
+      const { namespace } = await withMemoryStorage({
         ttl: 100,
         staleTtl: 5000,
         seed: entry({ data: "cached" }, 9000, 100, 5000),
@@ -368,7 +386,7 @@ describe("SocketClient", () => {
     });
 
     it("should serve an expired entry within staleTtl while priming the cache", async () => {
-      const { client, namespace } = withMemoryStorage({
+      const { client, namespace } = await withMemoryStorage({
         ttl: 100,
         staleTtl: 5000,
         seed: entry({ data: "cached" }, 500, 100, 5000),
@@ -380,6 +398,51 @@ describe("SocketClient", () => {
         },
         () => {},
       );
+    });
+  });
+
+  describe("cache storage", () => {
+    const cacheKey = 'test-namespace/testEvent ["arg1"]';
+
+    it("should refetch and drop entries left behind by axios-cache-interceptor", async () => {
+      const storage = createStorage();
+      await storage.setItem(cacheKey, {
+        state: "cached",
+        createdAt: Date.now(),
+        ttl: 60_000,
+        data: { data: "cached", headers: {}, status: 200, statusText: "OK" },
+      });
+      const removeSpy = jest.spyOn(storage, "removeItem");
+      const namespace = socketClient.addNamespace<ClientEvents>(
+        "test-namespace",
+        { cache: { ttl: 60_000, storage } },
+      );
+
+      expect(await namespace.testEvent("arg1")).toEqual({ data: "test" });
+      expect(removeSpy).toHaveBeenCalledWith(cacheKey);
+    });
+
+    it("should still resolve the call when the cache write fails", async () => {
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      const namespace = socketClient.addNamespace<ClientEvents>(
+        "test-namespace",
+        {
+          cache: {
+            ttl: 60_000,
+            storage: {
+              getItem: () => undefined,
+              setItem: () => {
+                throw new DOMException("full", "QuotaExceededError");
+              },
+              removeItem: jest.fn(),
+            },
+          },
+        },
+      );
+
+      expect(await namespace.testEvent("arg1")).toEqual({ data: "test" });
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 

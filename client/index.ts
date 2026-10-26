@@ -1,7 +1,4 @@
-// @ts-ignore Optional peer dependency
-import type { CacheOptions } from "axios-cache-interceptor";
 import { io, type Socket } from "socket.io-client";
-import { Ref, ref } from "vue";
 
 export type ScopedError<ErrorKey extends string = string> = {
   error: ErrorKey;
@@ -83,8 +80,48 @@ export interface EventPromise<T, E> extends Promise<T> {
 type CacheDuration<Events extends EventsMap> =
   number | ((event: StringKeyOf<Events>, args: unknown[]) => number);
 
+type MaybePromise<T> = T | Promise<T>;
+
+/** A cached event response. Durations are in milliseconds. */
+export type SocketCacheEntry = {
+  data: unknown;
+  createdAt: number;
+  ttl: number;
+  staleTtl?: number;
+};
+
+/**
+ * Where cached responses live. Expiry is decided by the client, so a storage
+ * only has to hand back what it was given. An unstorage instance
+ * (https://unstorage.unjs.io) fits as-is.
+ */
+export interface SocketCacheStorage {
+  getItem(key: string): MaybePromise<SocketCacheEntry | null | undefined>;
+  setItem(key: string, entry: SocketCacheEntry): MaybePromise<void>;
+  removeItem(key: string): MaybePromise<void>;
+}
+
+const getFreshness = (
+  entry: SocketCacheEntry,
+): "fresh" | "stale" | "expired" => {
+  // Entries written through axios-cache-interceptor wrap the payload in an
+  // HTTP response and carry a `state`: serving them would return the wrapper.
+  if ("state" in entry) {
+    return "expired";
+  }
+  const expiresAt = entry.createdAt + entry.ttl;
+  const now = Date.now();
+  if (now < expiresAt) {
+    return "fresh";
+  }
+  if (entry.staleTtl !== undefined && now <= expiresAt + entry.staleTtl) {
+    return "stale";
+  }
+  return "expired";
+};
+
 type SocketCacheOptions<Events extends EventsMap> = {
-  storage: NonNullable<CacheOptions["storage"]>;
+  storage: SocketCacheStorage;
   ttl: CacheDuration<Events>;
   /**
    * How long past `ttl` an entry may still be served, but only while offline
@@ -103,6 +140,46 @@ const resolveDuration = <Events extends EventsMap>(
 
 type EventsMap = Record<string, (...args: any[]) => Promise<any>>;
 
+/**
+ * A value that can be observed without any UI framework. It follows the Svelte
+ * store contract and plugs into React's `useSyncExternalStore`; values are
+ * replaced, never mutated, so a changed value is always a new reference.
+ */
+export type ReadonlyStore<T> = {
+  readonly value: T;
+  /** Calls `listener` with the current value, then on every change. */
+  subscribe: (listener: (value: T) => void) => () => void;
+};
+
+type Store<T> = ReadonlyStore<T> & { value: T };
+
+const createStore = <T>(initialValue: T): Store<T> => {
+  let value = initialValue;
+  const listeners = new Set<(value: T) => void>();
+  return {
+    get value() {
+      return value;
+    },
+    set value(newValue) {
+      value = newValue;
+      listeners.forEach((listener) => listener(value));
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      listener(value);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+};
+
+export type CacheHydratorState = {
+  mode: "LOAD_CACHE" | "HYDRATE";
+  cachedCallsDone: string[];
+  hydratedCallsDoneAmount: number;
+};
+
 type StringKeyOf<T> = keyof T & string;
 
 type SpecialProperties = "_socket" | "_connect" | "_ongoingCalls";
@@ -110,7 +187,7 @@ type SpecialProperties = "_socket" | "_connect" | "_ongoingCalls";
 type NamespaceProxyTargetInternal = {
   _socket: Socket | undefined;
   _connect: () => void;
-  _ongoingCalls: Ref<string[]>;
+  _ongoingCalls: ReadonlyStore<string[]>;
 };
 
 // The proxy throws any payload carrying an `error` key instead of resolving it,
@@ -178,32 +255,48 @@ export const stringifyEventParameters = (args: JsonValue[]): string => {
 export class SocketClient {
   constructor(private socketRootUrl: string) {}
 
+  private hydratorState = createStore<CacheHydratorState | undefined>(
+    undefined,
+  );
+
   public cacheHydrator = {
-    state: ref<{
-      mode: "LOAD_CACHE" | "HYDRATE";
-      cachedCallsDone: string[];
-      hydratedCallsDoneAmount: number;
-    }>(),
+    state: this.hydratorState as ReadonlyStore<CacheHydratorState | undefined>,
     run: async (
       loadCachedDataFn: () => Promise<void>,
       loadRealDataFn: () => void,
     ) => {
-      this.cacheHydrator.state = ref({
+      this.hydratorState.value = {
         mode: "LOAD_CACHE",
         cachedCallsDone: [],
         hydratedCallsDoneAmount: 0,
-      });
+      };
 
       console.debug("loading cache...");
       await loadCachedDataFn();
 
-      this.cacheHydrator.state.value!.mode = "HYDRATE";
-      this.cacheHydrator.state.value!.hydratedCallsDoneAmount = 0;
+      this.hydratorState.value = {
+        ...this.hydratorState.value,
+        mode: "HYDRATE",
+        hydratedCallsDoneAmount: 0,
+      };
 
       console.debug("Hydrating...");
       loadRealDataFn();
     },
   };
+
+  private countHydratedCall(eventConsoleString: string) {
+    const state = this.hydratorState.value;
+    if (
+      state?.mode === "HYDRATE" &&
+      state.cachedCallsDone.includes(eventConsoleString)
+    ) {
+      this.hydratorState.value = {
+        ...state,
+        hydratedCallsDoneAmount: state.hydratedCallsDoneAmount + 1,
+      };
+    }
+  }
 
   public onConnectError = (
     e: Error,
@@ -243,7 +336,7 @@ export class SocketClient {
 
     let isOffline: boolean | undefined;
 
-    const ongoingCalls = ref<string[]>([]);
+    const ongoingCalls = createStore<string[]>([]);
 
     const connect = () => {
       console.log("connect");
@@ -367,36 +460,33 @@ export class SocketClient {
           let cacheKey;
           if (cache && !disableCache) {
             cacheKey = `${namespaceName}/${eventName} ${JSON.stringify(args)}`;
-            const cacheData = await cache.storage.get(cacheKey);
+            const cacheEntry = await cache.storage.getItem(cacheKey);
+            const freshness = cacheEntry && getFreshness(cacheEntry);
+            if (freshness === "expired") {
+              await cache.storage.removeItem(cacheKey);
+            }
             // Past `ttl` the entry survives as "stale" for `staleTtl`, which is
             // only good enough when we cannot reach the server anyway.
             const mayUseStale =
-              isOffline ||
-              this.cacheHydrator.state.value?.mode === "LOAD_CACHE";
+              isOffline || this.hydratorState.value?.mode === "LOAD_CACHE";
             if (
-              cacheData?.state === "cached" ||
-              (mayUseStale && cacheData?.state === "stale")
+              cacheEntry &&
+              (freshness === "fresh" || (mayUseStale && freshness === "stale"))
             ) {
               debugCall(true, true);
-              if (this.cacheHydrator.state.value) {
-                switch (this.cacheHydrator.state.value.mode) {
-                  case "LOAD_CACHE":
-                    this.cacheHydrator.state.value.cachedCallsDone.push(
-                      eventConsoleString,
-                    );
-                    break;
-                  case "HYDRATE":
-                    if (
-                      this.cacheHydrator.state.value.cachedCallsDone.includes(
-                        eventConsoleString,
-                      )
-                    ) {
-                      this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
-                    }
-                    break;
-                }
+              const hydratorState = this.hydratorState.value;
+              if (hydratorState?.mode === "LOAD_CACHE") {
+                this.hydratorState.value = {
+                  ...hydratorState,
+                  cachedCallsDone: [
+                    ...hydratorState.cachedCallsDone,
+                    eventConsoleString,
+                  ],
+                };
+              } else {
+                this.countHydratedCall(eventConsoleString);
               }
-              return cacheData.data.data as any;
+              return cacheEntry.data as any;
             }
           }
 
@@ -423,33 +513,25 @@ export class SocketClient {
           }
           await debugCall(true);
           if (cache && cacheKey) {
-            cache.storage.set(cacheKey, {
-              state: "cached",
-              createdAt: Date.now(),
-              ttl: resolveDuration(cache.ttl, eventName, args),
-              staleTtl:
-                cache.staleTtl === undefined
-                  ? undefined
-                  : resolveDuration(cache.staleTtl, eventName, args),
-              // `headers` is dereferenced unconditionally when reading a
-              // "cached" entry, so it has to be present.
-              data: { data, headers: {}, status: 200, statusText: "OK" },
-            });
+            try {
+              await cache.storage.setItem(cacheKey, {
+                data,
+                createdAt: Date.now(),
+                ttl: resolveDuration(cache.ttl, eventName, args),
+                staleTtl:
+                  cache.staleTtl === undefined
+                    ? undefined
+                    : resolveDuration(cache.staleTtl, eventName, args),
+              });
+            } catch (e) {
+              // e.g. a full localStorage: the call itself already succeeded.
+              console.warn(`${eventConsoleString} could not be cached`, e);
+            }
           }
-          if (
-            this.cacheHydrator.state.value?.mode === "HYDRATE" &&
-            this.cacheHydrator.state.value.cachedCallsDone.includes(
-              eventConsoleString,
-            )
-          ) {
-            this.cacheHydrator.state.value.hydratedCallsDoneAmount++;
-          }
+          this.countHydratedCall(eventConsoleString);
           return data;
         };
       },
     });
   }
 }
-
-export type { AxiosStorage } from "axios-cache-interceptor";
-export { buildStorage, buildWebStorage } from "axios-cache-interceptor";

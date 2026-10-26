@@ -171,12 +171,16 @@ Event responses can be cached per namespace. A cache needs a `storage` and a
 `ttl`, and then applies to every event of that namespace:
 
 ```typescript
-import { SocketClient, buildWebStorage } from "socket-call-client";
+import { SocketClient } from "socket-call-client";
+import { createStorage } from "unstorage";
+import localStorageDriver from "unstorage/drivers/localstorage";
 
 const socket = new SocketClient("http://localhost:3000");
 const user = socket.addNamespace<UserEmitEvents, UserListenEvents>("/user", {
   cache: {
-    storage: buildWebStorage(localStorage, "socket-call:"),
+    storage: createStorage({
+      driver: localStorageDriver({ base: "socket-call" }),
+    }),
     ttl: 5 * 60 * 1000,
     staleTtl: 24 * 60 * 60 * 1000,
   },
@@ -207,6 +211,47 @@ single call — the argument is stripped before the event is sent:
 await user.getProfile(1, { disableCache: true });
 ```
 
-`axios-cache-interceptor` is an optional peer dependency: it is only needed if
-you pass a `cache` option. `buildStorage` and `buildWebStorage` are re-exported
-from it.
+A storage is anything implementing `SocketCacheStorage` (`getItem`, `setItem`
+and `removeItem`); the client itself decides whether an entry is fresh, stale or
+expired. Any [unstorage](https://unstorage.unjs.io) instance fits as-is, which
+covers memory, `localStorage`, IndexedDB, Redis and more. Other libraries only
+need a thin adapter:
+
+```typescript
+import type { SocketCacheStorage } from "socket-call-client";
+import { get, set, del } from "idb-keyval";
+
+const storage: SocketCacheStorage = {
+  getItem: (key) => get(key),
+  setItem: (key, entry) => set(key, entry),
+  removeItem: (key) => del(key),
+};
+```
+
+A failed cache write (a full `localStorage`, for instance) is logged and does
+not fail the call.
+
+#### Observing client state
+
+`user._ongoingCalls` (the calls of a namespace that are waiting for an answer)
+and `socket.cacheHydrator.state` are framework-agnostic stores: read the current
+value with `.value`, or `subscribe` to be called with it now and on every
+change. Values are replaced rather than mutated, so they plug into any UI
+library:
+
+```typescript
+// Vue
+const ongoingCalls = shallowRef(user._ongoingCalls.value);
+onScopeDispose(
+  user._ongoingCalls.subscribe((calls) => (ongoingCalls.value = calls)),
+);
+
+// React
+const ongoingCalls = useSyncExternalStore(
+  user._ongoingCalls.subscribe,
+  () => user._ongoingCalls.value,
+);
+
+// Svelte: stores are used as-is
+const ongoingCalls = user._ongoingCalls; // then `$ongoingCalls` in markup
+```
